@@ -1,6 +1,7 @@
 "use client";
-import { useDashboardLink } from "../../hooks/useDashboardLink";
 import React, { useState, useEffect, useCallback } from "react";
+import { useWalletContext } from "../../../../context/WalletContext";
+import Nav from "../../../../components/Nav";
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 const G = "#34d399";
 
@@ -8,24 +9,6 @@ const Blob = ({ x, y, color, size = 500 }) => (
   <div style={{ position:"absolute",left:x,top:y,width:size,height:size,borderRadius:"50%",background:color,filter:"blur(120px)",opacity:.12,pointerEvents:"none",transform:"translate(-50%,-50%)" }} />
 );
 
-function Nav() {
-  const [sc, setSc] = React.useState(false);
-  React.useEffect(() => { const h = () => setSc(window.scrollY > 20); window.addEventListener("scroll", h); return () => window.removeEventListener("scroll", h); }, []);
-    const { href: _dh, label: _dl, connected: _dc } = useDashboardLink();
-  const links = [["Passports","/passport/register"],["Disburse","/disburse"],["Oracle","/oracle"],["Transparency","/transparency"],...(_dc ? [[_dl,_dh]] : [])];
-  return (
-    <nav style={{ position:"fixed",top:0,left:0,right:0,zIndex:100,padding:"0 5%",height:62,display:"flex",alignItems:"center",justifyContent:"space-between",background:sc?"rgba(3,10,6,.95)":"rgba(3,10,6,.75)",backdropFilter:"blur(22px)",borderBottom:"1px solid rgba(255,255,255,.07)",transition:"background .4s" }}>
-      <a href="/" style={{ display:"flex",alignItems:"center",gap:9,textDecoration:"none" }}>
-        <div style={{ width:30,height:30,borderRadius:8,background:"linear-gradient(135deg,#34d399,#059669)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:800,color:"#022c22",fontFamily:"'Syne',sans-serif" }}>IC</div>
-        <span style={{ fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:16,color:"#f0fdf4",letterSpacing:"-.02em" }}>Impact<span style={{ color:G }}>Chain</span></span>
-      </a>
-      <div style={{ display:"flex",gap:24 }}>
-        {links.map(([l,h]) => <a key={l} href={h} style={{ color:l==="Passports"?G:"#94a3b8",textDecoration:"none",fontSize:13,fontWeight:500,borderBottom:l==="Passports"?"1px solid "+G:"none",paddingBottom:2 }}>{l}</a>)}
-      </div>
-      <a href="/agency/register" style={{ display:"inline-flex",padding:"7px 16px",borderRadius:10,background:"linear-gradient(135deg,#34d399,#059669)",color:"#022c22",fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:13,textDecoration:"none" }}>Register Agency</a>
-    </nav>
-  );
-}
 
 const CSS = `
   @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap');
@@ -45,7 +28,7 @@ const CSS = `
 `;
 
 function PassportRow({ p, onSelect }) {
-  const initials = (p.name || "?").split(" ").map(w => w[0]).join("").slice(0,2).toUpperCase();
+  const initials = (p.did || "??").slice(-4).toUpperCase();
   return (
     <div className="passport-row fade-up" onClick={() => onSelect(p)}>
       <div style={{ display:"flex",alignItems:"center",gap:14 }}>
@@ -58,18 +41,8 @@ function PassportRow({ p, onSelect }) {
         <div style={{ flex:1,minWidth:0 }}>
           <div style={{ display:"flex",alignItems:"center",gap:8,flexWrap:"wrap" }}>
             <span style={{ fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:14,color:"#f0fdf4" }}>
-              {p.name || "Anonymous"}
+              {p.district || "No district"}
             </span>
-            {p.nationality && (
-              <span className="chip" style={{ background:"rgba(96,165,250,.1)",color:"#60a5fa",border:"1px solid rgba(96,165,250,.2)" }}>
-                {p.nationality}
-              </span>
-            )}
-            {p.gender && (
-              <span className="chip" style={{ background:"rgba(167,139,250,.1)",color:"#a78bfa",border:"1px solid rgba(167,139,250,.2)" }}>
-                {p.gender}
-              </span>
-            )}
             {p.credential_count > 0 && (
               <span className="chip" style={{ background:"rgba(52,211,153,.1)",color:G,border:"1px solid rgba(52,211,153,.2)" }}>
                 {p.credential_count} cred{p.credential_count !== 1 ? "s" : ""}
@@ -97,17 +70,13 @@ function PassportRow({ p, onSelect }) {
 
 function PassportDetail({ p, onClose }) {
   const fields = [
-    ["DID",          p.did,            true],
-    ["Nationality",  p.nationality     || "—", false],
-    ["Gender",       p.gender          || "—", false],
-    ["Date of Birth",p.date_of_birth   || "—", false],
-    ["District",     p.district        || "—", false],
-    ["Household",    p.household_size  ? `${p.household_size} members` : "—", false],
-    ["Children",     p.children_count  != null ? p.children_count : "—", false],
-    ["Wallet",       p.wallet_address  || "—", true],
-    ["IPFS CID",     p.ipfs_cid        || "—", true],
-    ["Tx Hash",      p.tx_hash         || "—", true],
-    ["Registered",   p.created_at ? new Date(p.created_at).toLocaleString() : "—", false],
+    ["DID",       p.did,            true],
+    ["District",  p.district        || "—", false],
+    ["Children",  p.children_count  != null ? String(p.children_count) : "—", false],
+    ["Household", p.household_size  ? `${p.household_size} members` : "—", false],
+    ["Created by",p.created_by      || "—", true],
+    ["Tx Hash",   p.tx_hash         || "—", true],
+    ["Registered",p.created_at ? new Date(p.created_at).toLocaleString() : "—", false],
   ];
 
   return (
@@ -116,7 +85,7 @@ function PassportDetail({ p, onClose }) {
         <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20 }}>
           <div>
             <div style={{ fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:20,color:"#f0fdf4" }}>
-              {p.name || "Anonymous"}
+              {p.district ? `${p.district} Beneficiary` : "Beneficiary Passport"}
             </div>
             <div style={{ color:"#64748b",fontSize:12,marginTop:3 }}>Beneficiary Passport</div>
           </div>
@@ -152,10 +121,8 @@ function PassportDetail({ p, onClose }) {
 }
 
 export default function PassportSearchPage() {
-  const [apiKey,     setApiKey]     = useState("");
+  const { isConnected, status, authHeaders } = useWalletContext();
   const [q,          setQ]          = useState("");
-  const [nationality,setNationality]= useState("");
-  const [gender,     setGender]     = useState("");
   const [district,   setDistrict]   = useState("");
   const [hasCreds,   setHasCreds]   = useState(false);
   const [sort,       setSort]       = useState("created_at");
@@ -169,19 +136,19 @@ export default function PassportSearchPage() {
 
   const LIMIT = 20;
 
+  const ready = isConnected && status === "ready";
+
   const search = useCallback(async (off = 0) => {
-    if (!apiKey.trim()) return setError("API key is required");
+    if (!ready) return setError("Connect your wallet first");
     setError(""); setLoading(true); setOffset(off);
     try {
       const params = new URLSearchParams({ limit: LIMIT, offset: off, sort });
       if (q)           params.set("q", q);
-      if (nationality) params.set("nationality", nationality);
-      if (gender)      params.set("gender", gender);
       if (district)    params.set("district", district);
       if (hasCreds)    params.set("has_credentials", "true");
 
       const r = await fetch(`${API}/v1/passport?${params}`, {
-        headers: { Authorization: `Bearer ${apiKey}` },
+        headers: authHeaders(),
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || "Search failed");
@@ -193,20 +160,20 @@ export default function PassportSearchPage() {
     } finally {
       setLoading(false);
     }
-  }, [apiKey, q, nationality, gender, district, hasCreds, sort]);
+  }, [ready, q, district, hasCreds, sort]);
 
-  // Search on filter change (debounced)
+  // Auto-search when ready and on filter change
   useEffect(() => {
-    if (!apiKey || apiKey.length < 10) return;
+    if (!ready) return;
     const t = setTimeout(() => search(0), 400);
     return () => clearTimeout(t);
-  }, [q, nationality, gender, district, hasCreds, sort]);
+  }, [ready, q, district, hasCreds, sort]);
 
   const currentPage = Math.floor(offset / LIMIT) + 1;
 
   return (<>
     <style>{CSS}</style>
-    <Nav />
+    <Nav active="Passports" />
     {selected && <PassportDetail p={selected} onClose={() => setSelected(null)} />}
 
     <div style={{ minHeight:"100vh",background:"#030a06",padding:"88px 5% 60px",position:"relative",overflow:"hidden" }}>
@@ -222,18 +189,11 @@ export default function PassportSearchPage() {
           Browse and filter all beneficiary passports registered by your agency.
         </p>
 
-        {/* API key */}
-        <div className="card" style={{ padding:20,marginBottom:16 }}>
-          <label className="ic-label">Agency API Key</label>
-          <div style={{ display:"flex",gap:10 }}>
-            <input type="password" className="ic-input" placeholder="ic_live_…" value={apiKey}
-              onChange={e => setApiKey(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && search(0)} />
-            <button className="btn-p" onClick={() => search(0)} disabled={loading} style={{ whiteSpace:"nowrap" }}>
-              {loading ? "…" : "Search"}
-            </button>
+        {!ready && (
+          <div style={{ background:"rgba(52,211,153,.07)",border:"1px solid rgba(52,211,153,.15)",borderRadius:12,padding:"14px 18px",marginBottom:20,color:"#64748b",fontSize:13 }}>
+            🔒 Connect your wallet to search passports.
           </div>
-        </div>
+        )}
 
         {/* Filters */}
         <div className="card" style={{ padding:20,marginBottom:20 }}>
@@ -243,11 +203,7 @@ export default function PassportSearchPage() {
               <input className="ic-input" placeholder="Name, DID, district…" value={q}
                 onChange={e => setQ(e.target.value)} />
             </div>
-            <div>
-              <label className="ic-label">Nationality</label>
-              <input className="ic-input" placeholder="e.g. KE, ET, SO…" value={nationality}
-                onChange={e => setNationality(e.target.value)} />
-            </div>
+
             <div>
               <label className="ic-label">District</label>
               <input className="ic-input" placeholder="e.g. Nairobi…" value={district}
@@ -255,21 +211,13 @@ export default function PassportSearchPage() {
             </div>
           </div>
           <div style={{ display:"flex",gap:14,alignItems:"center",flexWrap:"wrap" }}>
-            <div style={{ minWidth:120 }}>
-              <label className="ic-label">Gender</label>
-              <select className="ic-input" value={gender} onChange={e => setGender(e.target.value)} style={{ padding:"9px 12px" }}>
-                <option value="">Any</option>
-                <option value="M">Male</option>
-                <option value="F">Female</option>
-                <option value="Other">Other</option>
-              </select>
-            </div>
+
             <div style={{ minWidth:140 }}>
               <label className="ic-label">Sort by</label>
               <select className="ic-input" value={sort} onChange={e => setSort(e.target.value)} style={{ padding:"9px 12px" }}>
                 <option value="created_at">Newest first</option>
                 <option value="name">Name A–Z</option>
-                <option value="nationality">Nationality</option>
+
                 <option value="district">District</option>
               </select>
             </div>
@@ -278,9 +226,9 @@ export default function PassportSearchPage() {
                 style={{ width:15,height:15,accentColor:G,cursor:"pointer" }} />
               <label htmlFor="has_creds" style={{ color:"#94a3b8",fontSize:13,cursor:"pointer" }}>Has credentials</label>
             </div>
-            {(q || nationality || gender || district || hasCreds) && (
+            {(q || district || hasCreds) && (
               <button className="btn-g" style={{ paddingTop:16,alignSelf:"flex-end" }}
-                onClick={() => { setQ(""); setNationality(""); setGender(""); setDistrict(""); setHasCreds(false); }}>
+                onClick={() => { setQ(""); setDistrict(""); setHasCreds(false); }}>
                 ✕ Clear
               </button>
             )}
@@ -352,7 +300,7 @@ export default function PassportSearchPage() {
               Your Beneficiary Registry
             </div>
             <div style={{ color:"#64748b",fontSize:14,maxWidth:360,margin:"0 auto" }}>
-              Enter your API key and press Search to browse all passports your agency has registered.
+Your wallet is connected — use the filters above to search passports registered by your agency.
             </div>
           </div>
         )}

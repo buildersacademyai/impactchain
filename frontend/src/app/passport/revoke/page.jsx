@@ -1,31 +1,13 @@
 "use client";
-import { useDashboardLink } from "../../hooks/useDashboardLink";
 import React, { useState } from "react";
+import { useWalletContext } from "../../../../context/WalletContext";
+import Nav from "../../../../components/Nav";
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
 const Blob = ({ x, y, color, size = 500 }) => (
   <div style={{ position:"absolute",left:x,top:y,width:size,height:size,borderRadius:"50%",background:color,filter:"blur(110px)",opacity:.13,pointerEvents:"none",transform:"translate(-50%,-50%)" }} />
 );
 
-function Nav({ active }) {
-  const [sc, setSc] = React.useState(false);
-  React.useEffect(() => { const h = () => setSc(window.scrollY > 20); window.addEventListener("scroll", h); return () => window.removeEventListener("scroll", h); }, []);
-  const G = "#34d399";
-    const { href: _dh, label: _dl, connected: _dc } = useDashboardLink();
-  const links = [["Passports","/passport/register"],["Disburse","/disburse"],["Oracle","/oracle"],["Transparency","/transparency"],...(_dc ? [[_dl,_dh]] : [])];
-  return (
-    <nav style={{ position:"fixed",top:0,left:0,right:0,zIndex:100,padding:"0 5%",height:62,display:"flex",alignItems:"center",justifyContent:"space-between",background:sc?"rgba(3,10,6,.95)":"rgba(3,10,6,.75)",backdropFilter:"blur(22px)",borderBottom:"1px solid rgba(255,255,255,.07)",transition:"background .4s" }}>
-      <a href="/" style={{ display:"flex",alignItems:"center",gap:9,textDecoration:"none" }}>
-        <div style={{ width:30,height:30,borderRadius:8,background:"linear-gradient(135deg,#34d399,#059669)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13 }}>IC</div>
-        <span style={{ fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:16,color:"#f0fdf4",letterSpacing:"-.02em" }}>Impact<span style={{ color:G }}>Chain</span></span>
-      </a>
-      <div style={{ display:"flex",gap:24 }}>
-        {links.map(([l,h]) => <a key={l} href={h} style={{ color:active===l?G:"#94a3b8",textDecoration:"none",fontSize:13,fontWeight:500,transition:"color .2s",borderBottom:active===l?"1px solid "+G:"none",paddingBottom:2 }} onMouseEnter={e=>e.currentTarget.style.color=G} onMouseLeave={e=>e.currentTarget.style.color=active===l?G:"#94a3b8"}>{l}</a>)}
-      </div>
-      <a href="/agency/register" style={{ display:"inline-flex",padding:"7px 16px",borderRadius:10,background:"linear-gradient(135deg,#34d399,#059669)",color:"#022c22",fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:13,textDecoration:"none" }}>Register Agency</a>
-    </nav>
-  );
-}
 
 const CSS = `
   @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap');
@@ -82,7 +64,8 @@ function ConfirmModal({ credential, index, onConfirm, onCancel, loading }) {
 
 export default function CredentialRevokePage() {
   const G = "#34d399";
-  const [apiKey,    setApiKey]    = useState("");
+  const { isConnected, status, authHeaders } = useWalletContext();
+  const ready = isConnected && status === "ready";
   const [did,       setDid]       = useState("");
   const [passport,  setPassport]  = useState(null);
   const [loading,   setLoading]   = useState(false);
@@ -92,12 +75,11 @@ export default function CredentialRevokePage() {
   const [revokedTx, setRevokedTx] = useState(null);
 
   async function lookup() {
-    if (!apiKey.trim()) return setError("API key is required");
-    if (!did.trim())    return setError("Enter a passport DID");
+    if (!did.trim()) return setError("Enter a passport DID");
     setError(""); setLoading(true); setPassport(null); setRevokedTx(null);
     try {
       const r = await fetch(`${API}/v1/passport/${encodeURIComponent(did.trim())}`, {
-        headers: { Authorization: `Bearer ${apiKey}` },
+        headers: authHeaders(),
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || "Passport not found");
@@ -115,7 +97,7 @@ export default function CredentialRevokePage() {
     try {
       const r = await fetch(
         `${API}/v1/passport/${encodeURIComponent(did.trim())}/credential/${confirm.index}/revoke`,
-        { method: "POST", headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" } }
+        { method: "POST", headers: { ...authHeaders(), "Content-Type": "application/json" } }
       );
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || "Revocation failed");
@@ -167,10 +149,11 @@ export default function CredentialRevokePage() {
 
         {/* Lookup form */}
         <div className="card" style={{ padding:28,marginBottom:24 }}>
-          <div className="field">
-            <label className="ic-label">Agency API Key</label>
-            <input type="password" className="ic-input" placeholder="ic_live_..." value={apiKey} onChange={e => setApiKey(e.target.value)} />
-          </div>
+          {!ready && (
+            <div style={{ background:"rgba(52,211,153,.07)",border:"1px solid rgba(52,211,153,.15)",borderRadius:10,padding:"12px 16px",marginBottom:16,color:"#64748b",fontSize:13 }}>
+              🔒 Connect your wallet to manage credentials.
+            </div>
+          )}
           <div className="field" style={{ marginBottom:0 }}>
             <label className="ic-label">Beneficiary DID</label>
             <div style={{ display:"flex",gap:10 }}>
@@ -182,7 +165,7 @@ export default function CredentialRevokePage() {
                 onKeyDown={e => e.key === "Enter" && lookup()}
                 style={{ flex:1 }}
               />
-              <button onClick={lookup} className="btn-p" disabled={loading} style={{ whiteSpace:"nowrap" }}>
+              <button onClick={lookup} className="btn-p" disabled={loading || !ready} style={{ whiteSpace:"nowrap" }}>
                 {loading ? "Looking up…" : "Look Up"}
               </button>
             </div>
@@ -200,7 +183,7 @@ export default function CredentialRevokePage() {
             <span style={{ fontSize:18 }}>✅</span>
             <div>
               <div style={{ color:"#34d399",fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:14 }}>Credential revoked on-chain</div>
-              <a href={`https://alfajores.celoscan.io/tx/${revokedTx}`} target="_blank" rel="noreferrer" style={{ color:"#64748b",fontSize:12,textDecoration:"none" }}>
+              <a href={`https://sepolia.celoscan.io/tx/${revokedTx}`} target="_blank" rel="noreferrer" style={{ color:"#64748b",fontSize:12,textDecoration:"none" }}>
                 View tx: {revokedTx.slice(0,18)}…
               </a>
             </div>
@@ -216,7 +199,7 @@ export default function CredentialRevokePage() {
                 <div>
                   <div style={{ color:"#64748b",fontSize:11,textTransform:"uppercase",letterSpacing:".06em",marginBottom:4 }}>Beneficiary</div>
                   <div style={{ fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:17,color:"#f0fdf4" }}>
-                    {passport.name || "Anonymous"}
+                    {passport.district ? `${passport.district} Beneficiary` : "Beneficiary Passport"}
                   </div>
                   <div style={{ fontFamily:"monospace",fontSize:12,color:"#64748b",marginTop:4,wordBreak:"break-all" }}>{passport.did}</div>
                 </div>

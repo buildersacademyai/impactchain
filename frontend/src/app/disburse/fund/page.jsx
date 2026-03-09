@@ -1,31 +1,13 @@
 "use client";
-import { useDashboardLink } from "../../hooks/useDashboardLink";
 import React, { useState, useEffect, useCallback } from "react";
+import { useWalletContext } from "../../../../context/WalletContext";
+import Nav from "../../../../components/Nav";
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
 const Blob = ({ x, y, color, size = 500 }) => (
   <div style={{ position:"absolute",left:x,top:y,width:size,height:size,borderRadius:"50%",background:color,filter:"blur(110px)",opacity:.13,pointerEvents:"none",transform:"translate(-50%,-50%)" }} />
 );
 
-function Nav() {
-  const [sc, setSc] = React.useState(false);
-  React.useEffect(() => { const h = () => setSc(window.scrollY > 20); window.addEventListener("scroll", h); return () => window.removeEventListener("scroll", h); }, []);
-  const G = "#34d399";
-    const { href: _dh, label: _dl, connected: _dc } = useDashboardLink();
-  const links = [["Passports","/passport/register"],["Disburse","/disburse"],["Oracle","/oracle"],["Transparency","/transparency"],...(_dc ? [[_dl,_dh]] : [])];
-  return (
-    <nav style={{ position:"fixed",top:0,left:0,right:0,zIndex:100,padding:"0 5%",height:62,display:"flex",alignItems:"center",justifyContent:"space-between",background:sc?"rgba(3,10,6,.95)":"rgba(3,10,6,.75)",backdropFilter:"blur(22px)",borderBottom:"1px solid rgba(255,255,255,.07)",transition:"background .4s" }}>
-      <a href="/" style={{ display:"flex",alignItems:"center",gap:9,textDecoration:"none" }}>
-        <div style={{ width:30,height:30,borderRadius:8,background:"linear-gradient(135deg,#34d399,#059669)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13 }}>IC</div>
-        <span style={{ fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:16,color:"#f0fdf4",letterSpacing:"-.02em" }}>Impact<span style={{ color:G }}>Chain</span></span>
-      </a>
-      <div style={{ display:"flex",gap:24 }}>
-        {links.map(([l,h]) => <a key={l} href={h} style={{ color:"#94a3b8",textDecoration:"none",fontSize:13,fontWeight:500,transition:"color .2s" }} onMouseEnter={e=>e.currentTarget.style.color=G} onMouseLeave={e=>e.currentTarget.style.color="#94a3b8"}>{l}</a>)}
-      </div>
-      <a href="/agency/register" style={{ display:"inline-flex",padding:"7px 16px",borderRadius:10,background:"linear-gradient(135deg,#34d399,#059669)",color:"#022c22",fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:13,textDecoration:"none" }}>Register Agency</a>
-    </nav>
-  );
-}
 
 const CSS = `
   @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap');
@@ -90,7 +72,7 @@ function BalanceCard({ balance, loading, onRefresh }) {
           </div>
         </>
       ) : (
-        <div style={{ textAlign:"center",color:"#475569",padding:"20px 0",fontSize:14 }}>Enter your API key to load balance</div>
+        <div style={{ textAlign:"center",color:"#475569",padding:"20px 0",fontSize:14 }}>Connect your wallet to load balance</div>
       )}
     </div>
   );
@@ -104,7 +86,7 @@ function TxSuccess({ tx, action, amount }) {
         <div style={{ color:"#34d399",fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:14 }}>
           {amount} cUSD {action} successfully
         </div>
-        <a href={`https://alfajores.celoscan.io/tx/${tx}`} target="_blank" rel="noreferrer"
+        <a href={`https://sepolia.celoscan.io/tx/${tx}`} target="_blank" rel="noreferrer"
           style={{ color:"#64748b",fontSize:12,textDecoration:"none" }}>
           View on CeloScan → {tx.slice(0,22)}…
         </a>
@@ -115,7 +97,8 @@ function TxSuccess({ tx, action, amount }) {
 
 export default function FundingPage() {
   const G = "#34d399";
-  const [apiKey,   setApiKey]   = useState("");
+  const { isConnected, status, authHeaders } = useWalletContext();
+  const ready = isConnected && status === "ready";
   const [tab,      setTab]      = useState("deposit"); // deposit | withdraw
   const [amount,   setAmount]   = useState("");
   const [balance,  setBalance]  = useState(null);
@@ -124,28 +107,27 @@ export default function FundingPage() {
   const [error,    setError]    = useState("");
   const [lastTx,   setLastTx]   = useState(null); // { tx_hash, action, amount }
 
-  const fetchBalance = useCallback(async (key) => {
-    const k = key || apiKey;
-    if (!k) return;
+  const fetchBalance = useCallback(async () => {
+    if (!ready) return;
     setBalLoading(true);
     try {
       const r = await fetch(`${API}/v1/disburse/balance`, {
-        headers: { Authorization: `Bearer ${k}` },
+        headers: authHeaders(),
       });
       const data = await r.json();
       if (r.ok) setBalance(data);
     } catch {}
     setBalLoading(false);
-  }, [apiKey]);
+  }, [ready]);
 
-  // Auto-load balance when API key is pasted
+  // Auto-load balance when wallet ready
   useEffect(() => {
-    if (apiKey.length > 20) fetchBalance(apiKey);
-  }, [apiKey]);
+    if (ready) fetchBalance();
+  }, [ready]);
 
   async function submit() {
     setError(""); setLastTx(null);
-    if (!apiKey) return setError("API key is required");
+    if (!ready) return setError("Connect your wallet first");
     const amt = parseFloat(amount);
     if (!amt || isNaN(amt) || amt <= 0) return setError("Enter a valid amount");
 
@@ -154,14 +136,14 @@ export default function FundingPage() {
       const endpoint = tab === "deposit" ? "/v1/disburse/deposit" : "/v1/disburse/withdraw";
       const r = await fetch(`${API}${endpoint}`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
         body: JSON.stringify({ amount_usd: amt }),
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || `${tab} failed`);
       setLastTx({ tx_hash: data.tx_hash, action: tab === "deposit" ? "deposited" : "withdrawn", amount: amt });
       setAmount("");
-      await fetchBalance(apiKey);
+      await fetchBalance();
     } catch (e) {
       setError(e.message);
     } finally {
@@ -175,7 +157,7 @@ export default function FundingPage() {
 
   return (<>
     <style>{CSS}</style>
-    <Nav />
+    <Nav active="Disburse" />
 
     <div style={{ minHeight:"100vh",background:"#030a06",padding:"96px 5% 60px",position:"relative",overflow:"hidden" }}>
       <Blob x="20%" y="20%" color="#34d399" size={500} />
@@ -190,15 +172,14 @@ export default function FundingPage() {
           Deposit cUSD into the ImpactChain contract to fund disbursements. Withdraw unspent funds at any time.
         </p>
 
-        {/* API Key */}
-        <div className="card" style={{ padding:24,marginBottom:20 }}>
-          <label className="ic-label">Agency API Key</label>
-          <input type="password" className="ic-input" placeholder="ic_live_…" value={apiKey}
-            onChange={e => setApiKey(e.target.value)} />
-        </div>
+        {!ready && (
+          <div style={{ background:"rgba(52,211,153,.07)",border:"1px solid rgba(52,211,153,.15)",borderRadius:12,padding:"14px 18px",marginBottom:20,color:"#64748b",fontSize:13 }}>
+            🔒 Connect your wallet to fund disbursements.
+          </div>
+        )}
 
         {/* Balance card */}
-        <BalanceCard balance={balance} loading={balLoading} onRefresh={() => fetchBalance(apiKey)} />
+        <BalanceCard balance={balance} loading={balLoading} onRefresh={fetchBalance} />
 
         {/* How deposit works */}
         {tab === "deposit" && (
@@ -272,7 +253,7 @@ export default function FundingPage() {
             </div>
           )}
 
-          <button onClick={submit} disabled={loading || !amount}
+          <button onClick={submit} disabled={loading || !amount || !ready}
             className={tab === "withdraw" ? "btn-r" : "btn-p"}
             style={{ width:"100%",justifyContent:"center" }}>
             {loading

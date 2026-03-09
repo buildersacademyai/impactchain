@@ -1,6 +1,7 @@
 "use client";
-import { useDashboardLink } from "../../hooks/useDashboardLink";
-import React, { useState, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
+import { useWalletContext } from "../../context/WalletContext";
+import Nav from "../../components/Nav";
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 const G = "#34d399";
 const B = "#60a5fa";
@@ -9,24 +10,6 @@ const Blob = ({ x, y, color, size = 500 }) => (
   <div style={{ position:"absolute",left:x,top:y,width:size,height:size,borderRadius:"50%",background:color,filter:"blur(110px)",opacity:.12,pointerEvents:"none",transform:"translate(-50%,-50%)" }} />
 );
 
-function Nav() {
-  const [sc, setSc] = React.useState(false);
-  React.useEffect(() => { const h = () => setSc(window.scrollY > 20); window.addEventListener("scroll", h); return () => window.removeEventListener("scroll", h); }, []);
-    const { href: _dh, label: _dl, connected: _dc } = useDashboardLink();
-  const links = [["Passports","/passport/register"],["Disburse","/disburse"],["Oracle","/oracle"],["Transparency","/transparency"],...(_dc ? [[_dl,_dh]] : [])];
-  return (
-    <nav style={{ position:"fixed",top:0,left:0,right:0,zIndex:100,padding:"0 5%",height:62,display:"flex",alignItems:"center",justifyContent:"space-between",background:sc?"rgba(3,10,6,.95)":"rgba(3,10,6,.75)",backdropFilter:"blur(22px)",borderBottom:"1px solid rgba(255,255,255,.07)",transition:"background .4s" }}>
-      <a href="/" style={{ display:"flex",alignItems:"center",gap:9,textDecoration:"none" }}>
-        <div style={{ width:30,height:30,borderRadius:8,background:"linear-gradient(135deg,#34d399,#059669)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:800,color:"#022c22",fontFamily:"'Syne',sans-serif" }}>IC</div>
-        <span style={{ fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:16,color:"#f0fdf4",letterSpacing:"-.02em" }}>Impact<span style={{ color:G }}>Chain</span></span>
-      </a>
-      <div style={{ display:"flex",gap:24 }}>
-        {links.map(([l,h]) => <a key={l} href={h} style={{ color:l==="Oracle"?B:"#94a3b8",textDecoration:"none",fontSize:13,fontWeight:500,borderBottom:l==="Oracle"?"1px solid "+B:"none",paddingBottom:2 }}>{l}</a>)}
-      </div>
-      <a href="/agency/register" style={{ display:"inline-flex",padding:"7px 16px",borderRadius:10,background:"linear-gradient(135deg,#34d399,#059669)",color:"#022c22",fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:13,textDecoration:"none" }}>Register Agency</a>
-    </nav>
-  );
-}
 
 const CSS = `
   @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap');
@@ -75,7 +58,7 @@ function ConfirmDeactivate({ oracle, onConfirm, onCancel, loading }) {
   );
 }
 
-function TriggerHistory({ oracle, apiKey, onClose }) {
+function TriggerHistory({ oracle, authHeaders, onClose }) {
   const [triggers, setTriggers] = React.useState(null);
   const [loading,  setLoading]  = React.useState(false);
   const [error,    setError]    = React.useState("");
@@ -84,12 +67,12 @@ function TriggerHistory({ oracle, apiKey, onClose }) {
     const chainId = oracle.chain_id ?? oracle.id;
     if (chainId == null) { setError("No chain ID available"); return; }
     setLoading(true);
-    fetch(`${API}/v1/oracle/${chainId}/triggers`, { headers: { Authorization: `Bearer ${apiKey}` } })
+    fetch(`${API}/v1/oracle/${chainId}/triggers`, { headers: authHeaders() })
       .then(r => r.json())
       .then(d => setTriggers(d.triggers || []))
       .catch(() => setError("Failed to load trigger history"))
       .finally(() => setLoading(false));
-  }, [oracle, apiKey]);
+  }, [oracle]);
 
   const totalDisbursed = triggers?.reduce((s, t) => s + t.total_disbursed_cusd, 0) || 0;
   const totalFamilies  = triggers?.reduce((s, t) => s + t.families_affected, 0) || 0;
@@ -149,7 +132,7 @@ function TriggerHistory({ oracle, apiKey, onClose }) {
   );
 }
 
-function OracleCard({ oracle, apiKey, onAction }) {
+function OracleCard({ oracle, onAction }) {
   const sc = severityColor(oracle.severity);
   const isActive = oracle.status === "active";
   return (
@@ -183,7 +166,8 @@ function OracleCard({ oracle, apiKey, onAction }) {
 }
 
 export default function OraclePage() {
-  const [apiKey,       setApiKey]       = useState("");
+  const { isConnected, status, authHeaders } = useWalletContext();
+  const ready = isConnected && status === "ready";
   const [form,         setForm]         = useState({ event_type:"CRISIS", location:"", severity:3, description:"", affected_count:"", disburse_cusd:"" });
   const [oracles,      setOracles]      = useState([]);
   const [result,       setResult]       = useState(null);
@@ -196,30 +180,31 @@ export default function OraclePage() {
 
   const set = k => e => setForm(p => ({ ...p, [k]: e.target.value }));
 
-  const loadOracles = useCallback(async (key) => {
-    const k = key || apiKey;
-    if (!k.trim()) return;
+  useEffect(() => { if (ready) loadOracles(); }, [ready]);
+
+  const loadOracles = useCallback(async () => {
+    if (!ready) return;
     setLoadingO(true);
     try {
-      const r = await fetch(`${API}/v1/oracle`, { headers: { Authorization: `Bearer ${k}` } });
+      const r = await fetch(`${API}/v1/oracle`, { headers: authHeaders() });
       const d = await r.json();
       setOracles(Array.isArray(d.oracles) ? d.oracles : []);
     } catch {}
     setLoadingO(false);
-  }, [apiKey]);
+  }, [ready]);
 
   const submit = async () => {
-    if (!apiKey.trim()) { setErr("API key required"); return; }
+    if (!ready) { setErr("Connect your wallet first"); return; }
     setLoading(true); setErr(""); setResult(null);
     try {
       const r = await fetch(`${API}/v1/oracle`, {
         method:"POST",
-        headers:{ "Content-Type":"application/json", Authorization:`Bearer ${apiKey}` },
+        headers:{ ...authHeaders(), "Content-Type":"application/json" },
         body: JSON.stringify({ ...form, severity:parseInt(form.severity), affected_count:parseInt(form.affected_count)||0, disburse_cusd:parseFloat(form.disburse_cusd)||0 }),
       });
       const d = await r.json();
       if (!r.ok) { setErr(d.error||"Failed"); setLoading(false); return; }
-      setResult(d); loadOracles(apiKey);
+      setResult(d); loadOracles();
     } catch { setErr("Network error"); }
     setLoading(false);
   };
@@ -230,7 +215,7 @@ export default function OraclePage() {
     const chainId = confirm.chain_id ?? confirm.id;
     try {
       const r = await fetch(`${API}/v1/oracle/${chainId}/deactivate`, {
-        method:"POST", headers:{ Authorization:`Bearer ${apiKey}`, "Content-Type":"application/json" },
+        method:"POST", headers:{ ...authHeaders(), "Content-Type":"application/json" },
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || "Deactivation failed");
@@ -242,9 +227,9 @@ export default function OraclePage() {
 
   return (<>
     <style>{CSS}</style>
-    <Nav />
+    <Nav active="Oracle" />
     {confirm && <ConfirmDeactivate oracle={confirm} onConfirm={deactivate} onCancel={() => setConfirm(null)} loading={deactivating} />}
-    {historyOracle && <TriggerHistory oracle={historyOracle} apiKey={apiKey} onClose={() => setHistoryOracle(null)} />}
+    {historyOracle && <TriggerHistory oracle={historyOracle} authHeaders={authHeaders} onClose={() => setHistoryOracle(null)} />}
 
     <div style={{ minHeight:"100vh",background:"#030a06",padding:"88px 5% 60px",position:"relative",overflow:"hidden" }}>
       <Blob x="75%" y="15%" color="#60a5fa" size={500} />
@@ -263,11 +248,11 @@ export default function OraclePage() {
           {/* Deploy form */}
           <div className="card" style={{ padding:24 }}>
             <div style={{ fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:15,color:"#f0fdf4",marginBottom:18 }}>Deploy New Oracle</div>
-            <div className="field">
-              <label className="ic-label">API Key</label>
-              <input type="password" className="ic-input" placeholder="ic_live_…" value={apiKey}
-                onChange={e => setApiKey(e.target.value)} onBlur={() => loadOracles(apiKey)} />
-            </div>
+            {!ready && (
+              <div style={{ background:"rgba(96,165,250,.07)",border:"1px solid rgba(96,165,250,.15)",borderRadius:10,padding:"12px 14px",marginBottom:16,color:"#64748b",fontSize:13 }}>
+                🔒 Connect your wallet to deploy oracles.
+              </div>
+            )}
             <div className="field">
               <label className="ic-label">Event Type</label>
               <select className="ic-input" value={form.event_type} onChange={set("event_type")}>
@@ -302,7 +287,7 @@ export default function OraclePage() {
               <div style={{ background:"rgba(96,165,250,.07)",border:"1px solid rgba(96,165,250,.2)",borderRadius:11,padding:"12px 16px",marginBottom:14 }}>
                 <div style={{ color:B,fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:13 }}>Oracle deployed ✓</div>
                 {result.chain_id != null && <div style={{ color:"#64748b",fontSize:11,marginTop:3 }}>Chain ID #{result.chain_id}</div>}
-                {result.tx_hash && <a href={`https://alfajores.celoscan.io/tx/${result.tx_hash}`} target="_blank" rel="noreferrer" style={{ color:B,fontSize:11,textDecoration:"none" }}>View tx →</a>}
+                {result.tx_hash && <a href={`https://sepolia.celoscan.io/tx/${result.tx_hash}`} target="_blank" rel="noreferrer" style={{ color:B,fontSize:11,textDecoration:"none" }}>View tx →</a>}
               </div>
             )}
             <button className="btn-p" style={{ width:"100%",justifyContent:"center" }} onClick={submit} disabled={loading}>
@@ -317,7 +302,7 @@ export default function OraclePage() {
                 Your Oracles
                 {oracles.length > 0 && <span style={{ marginLeft:8,color:"#64748b",fontWeight:400,fontSize:13 }}>({oracles.filter(o=>o.status==="active").length} active)</span>}
               </div>
-              <button className="btn-g" style={{ fontSize:12,padding:"7px 14px" }} onClick={() => loadOracles(apiKey)}>↻ Refresh</button>
+              <button className="btn-g" style={{ fontSize:12,padding:"7px 14px" }} onClick={() => loadOracles()}>↻ Refresh</button>
             </div>
 
             {loadingO ? (
@@ -327,12 +312,12 @@ export default function OraclePage() {
             ) : oracles.length === 0 ? (
               <div className="card" style={{ padding:40,textAlign:"center" }}>
                 <div style={{ fontSize:32,marginBottom:10 }}>⚡</div>
-                <div style={{ color:"#64748b",fontSize:14 }}>{apiKey ? "No oracles found for this agency." : "Enter your API key to load oracles."}</div>
+                <div style={{ color:"#64748b",fontSize:14 }}>{ready ? "No oracles found for this agency." : "Connect your wallet to load oracles."}</div>
               </div>
             ) : (
               <div style={{ display:"flex",flexDirection:"column",gap:10 }}>
                 {oracles.map((o,i) => (
-                  <OracleCard key={o.id||i} oracle={o} apiKey={apiKey}
+                  <OracleCard key={o.id||i} oracle={o}
                     onAction={(oracle, action) => action==="history" ? setHistoryOracle(oracle) : setConfirm(oracle)} />
                 ))}
               </div>
