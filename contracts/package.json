@@ -1,0 +1,19 @@
+{
+  "name": "impactchain-contracts",
+  "version": "1.0.0",
+  "description": "ImpactChain smart contracts — Celo L2",
+  "scripts": {
+    "test": "npx hardhat test",
+    "compile": "npx hardhat compile",
+    "deploy:testnet": "npx hardhat run scripts/deploy.js --network alfajores",
+    "deploy:mainnet": "npx hardhat run scripts/deploy.js --network celo",
+    "lint": "npx slither .",
+    "coverage": "npx hardhat coverage"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@openzeppelin/contracts": "^5.0.0",
+    "dotenv": "^16.4.0",
+    "hardhat": "^2.22.0"
+  }
+}
