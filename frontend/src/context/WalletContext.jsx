@@ -26,62 +26,60 @@ export function WalletProvider({ children }) {
   // Set synchronously before any effect runs — true if valid session in localStorage
   const hasSessionRef         = useRef(!!loadSession());
 
-  // ── Mount: restore session, then do background role refresh ─────────────────
+  // ── Mount: restore session OR auto sign-in if no session ───────────────────
   useEffect(() => {
     const saved = loadSession();
-    if (!saved) {
+
+    if (saved) {
+      // Valid session — restore immediately, refresh role silently in background
+      setToken(saved.token);
+      setRole(saved.role);
+      setAgency(saved.agency);
+      setStatus("ready");
+      hasSessionRef.current = true;
+      sessionRestoredRef.current = true;
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
+      fetch(`${API}/v1/auth/me`, {
+        headers: { Authorization: `Bearer ${saved.token}` },
+        signal: controller.signal,
+      })
+        .then(r => r.ok ? r.json() : Promise.reject(new Error("not_ok")))
+        .then(d => {
+          clearTimeout(timeout);
+          setRole(d.role);
+          if (d.agency) setAgency(d.agency);
+          storeSession(saved.token, d.role, d.agency || saved.agency, saved.wallet);
+        })
+        .catch(err => {
+          clearTimeout(timeout);
+          if (err.name === "AbortError") return; // API slow — keep cached session
+          // Token expired — clear session, will trigger sign-in via second effect
+          localStorage.removeItem(SESSION_KEY);
+          hasSessionRef.current = false;
+          setStatus("idle"); setToken(null); setRole(null); setAgency(null);
+        });
+    } else {
+      // No session — mark restored so the sign-in effect can run
+      hasSessionRef.current = false;
       sessionRestoredRef.current = true;
       setStatus("idle");
-      return;
     }
-    // Restore cached values immediately — show UI right away, don't block on spinner
-    setToken(saved.token);
-    setRole(saved.role);
-    setAgency(saved.agency);
-    setStatus("ready"); // ← show cached content immediately, refresh silently
-    hasSessionRef.current = true;
-    sessionRestoredRef.current = true;
-
-    // Background re-verify with a 5s timeout — update role silently if changed
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
-
-    fetch(`${API}/v1/auth/me`, {
-      headers: { Authorization: `Bearer ${saved.token}` },
-      signal: controller.signal,
-    })
-      .then(r => r.ok ? r.json() : Promise.reject(new Error("not_ok")))
-      .then(d => {
-        clearTimeout(timeout);
-        setRole(d.role);
-        if (d.agency) setAgency(d.agency);
-        storeSession(saved.token, d.role, d.agency || saved.agency, saved.wallet);
-        // status stays "ready" — no flicker
-      })
-      .catch(err => {
-        clearTimeout(timeout);
-        if (err.name === "AbortError") {
-          // API slow / offline — keep cached session, let user use the app
-          return;
-        }
-        // Token genuinely expired (401) — clear and force re-login
-        localStorage.removeItem(SESSION_KEY);
-        hasSessionRef.current = false;
-        setStatus("idle"); setToken(null); setRole(null); setAgency(null);
-      });
   }, []);
 
-  // ── Auto sign-in when wallet connected but NO valid session ────────────────
+  // ── Auto sign-in ONLY when: no session + wallet already connected ────────────
+  // Runs when sessionRestoredRef flips true (via status idle) and wallet is connected.
+  // Strictly guarded — will NOT fire if a session was restored above.
   useEffect(() => {
-    if (!sessionRestoredRef.current) return; // wait for localStorage restore
-    if (!isConnected || !address) return;    // wallet not connected
-    if (hasSessionRef.current) return;       // valid session exists — don't re-sign
-    if (status === "ready") return;          // already authenticated
-    if (signingRef.current) return;          // already in progress
-    if (status === "signing" || status === "verifying") return; // already running
+    if (!sessionRestoredRef.current) return;
+    if (hasSessionRef.current) return;       // ← session exists, never re-sign
+    if (!isConnected || !address) return;
+    if (status !== "idle") return;           // only trigger from clean idle state
+    if (signingRef.current) return;
 
     doSignIn(address.toLowerCase());
-  }, [isConnected, address, status]);
+  }, [status, isConnected, address]);
 
   const doSignIn = async (addrLower) => {
     if (signingRef.current) return;
@@ -117,11 +115,14 @@ export function WalletProvider({ children }) {
       if (!verifyRes.ok) throw new Error(vd.error || "Verify failed");
 
       storeSession(vd.token, vd.role, vd.agency, addrLower);
+      hasSessionRef.current = true;  // guard — prevent re-sign on re-render
       setToken(vd.token); setRole(vd.role); setAgency(vd.agency);
       setStatus("ready");
     } catch (err) {
       const rejected = err.message?.toLowerCase().includes("rejected") ||
                        err.message?.toLowerCase().includes("denied");
+      // On rejection keep idle so user can try again; on error show message
+      // Don't set hasSessionRef — user can retry via connect button
       setStatus(rejected ? "idle" : "error");
       if (!rejected) setError(err.message || "Sign-in failed");
     } finally {

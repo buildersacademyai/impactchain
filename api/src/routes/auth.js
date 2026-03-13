@@ -54,7 +54,13 @@ async function detectRole(wallet) {
       "SELECT active, on_chain FROM agencies WHERE LOWER(celo_address) = $1 LIMIT 1",
       [addrLower]
     );
-    if (row.rows.length) return "pending"; // in DB but no on-chain role yet
+    if (row.rows.length) {
+      const agency = row.rows[0];
+      if (agency.active === false) return "rejected";
+      // on_chain=true means admin approved — trust DB even if chain read was stale
+      if (agency.on_chain === true && agency.active === true) return "agency";
+      return "pending"; // in DB but not yet approved
+    }
     return "unregistered";
   } catch (chainErr) {
     console.warn("[auth] chain role check failed, using DB fallback:", chainErr.message);
@@ -65,7 +71,11 @@ async function detectRole(wallet) {
       [addrLower]
     );
     if (row.rows.length && row.rows[0].active) return "agency";
-    if (row.rows.length) return "pending"; // registered in DB, not yet approved on-chain
+    if (row.rows.length) {
+      const agency = row.rows[0];
+      if (agency.active === false) return "rejected";
+      return "pending";
+    }
     return "unregistered";
   }
 }
@@ -150,7 +160,7 @@ router.post("/verify", async (req, res, next) => {
     // ── Fetch or create agency DB record ─────────────────────────────────────
     let agency = null;
     const agencyRow = await db.query(
-      "SELECT * FROM agencies WHERE LOWER(wallet_address) = $1 LIMIT 1",
+      "SELECT * FROM agencies WHERE LOWER(celo_address) = $1 LIMIT 1",
       [wallet]
     );
 
@@ -215,7 +225,7 @@ router.get("/me", async (req, res, next) => {
     const role = await detectRole(wallet);
 
     const dbRow = await db.query(
-      "SELECT * FROM agencies WHERE LOWER(wallet_address) = $1 LIMIT 1",
+      "SELECT * FROM agencies WHERE LOWER(celo_address) = $1 LIMIT 1",
       [wallet]
     );
 

@@ -1,13 +1,32 @@
 "use client";
+import { useDashboardLink } from "../../../hooks/useDashboardLink";
+import { useWalletContext } from "../../../context/WalletContext";
 import React, { useState, useEffect, useCallback } from "react";
-import { useWalletContext } from "../../../../context/WalletContext";
-import Nav from "../../../../components/Nav";
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
 const Blob = ({ x, y, color, size = 500 }) => (
   <div style={{ position:"absolute",left:x,top:y,width:size,height:size,borderRadius:"50%",background:color,filter:"blur(110px)",opacity:.13,pointerEvents:"none",transform:"translate(-50%,-50%)" }} />
 );
 
+function Nav() {
+  const [sc, setSc] = React.useState(false);
+  React.useEffect(() => { const h = () => setSc(window.scrollY > 20); window.addEventListener("scroll", h); return () => window.removeEventListener("scroll", h); }, []);
+  const G = "#34d399";
+    const { href: _dh, label: _dl, connected: _dc } = useDashboardLink();
+  const links = [["Passports","/passport/register"],["Disburse","/disburse"],["Oracle","/oracle"],["Transparency","/transparency"],...(_dc ? [[_dl,_dh]] : [])];
+  return (
+    <nav style={{ position:"fixed",top:0,left:0,right:0,zIndex:100,padding:"0 5%",height:62,display:"flex",alignItems:"center",justifyContent:"space-between",background:sc?"rgba(3,10,6,.95)":"rgba(3,10,6,.75)",backdropFilter:"blur(22px)",borderBottom:"1px solid rgba(255,255,255,.07)",transition:"background .4s" }}>
+      <a href="/" style={{ display:"flex",alignItems:"center",gap:9,textDecoration:"none" }}>
+        <div style={{ width:30,height:30,borderRadius:8,background:"linear-gradient(135deg,#34d399,#059669)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13 }}>IC</div>
+        <span style={{ fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:16,color:"#f0fdf4",letterSpacing:"-.02em" }}>Impact<span style={{ color:G }}>Chain</span></span>
+      </a>
+      <div style={{ display:"flex",gap:24 }}>
+        {links.map(([l,h]) => <a key={l} href={h} style={{ color:"#94a3b8",textDecoration:"none",fontSize:13,fontWeight:500,transition:"color .2s" }} onMouseEnter={e=>e.currentTarget.style.color=G} onMouseLeave={e=>e.currentTarget.style.color="#94a3b8"}>{l}</a>)}
+      </div>
+      <a href="/agency/register" style={{ display:"inline-flex",padding:"7px 16px",borderRadius:10,background:"linear-gradient(135deg,#34d399,#059669)",color:"#022c22",fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:13,textDecoration:"none" }}>Register Agency</a>
+    </nav>
+  );
+}
 
 const CSS = `
   @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap');
@@ -97,37 +116,37 @@ function TxSuccess({ tx, action, amount }) {
 
 export default function FundingPage() {
   const G = "#34d399";
-  const { isConnected, status, authHeaders } = useWalletContext();
-  const ready = isConnected && status === "ready";
-  const [tab,      setTab]      = useState("deposit"); // deposit | withdraw
+  const { token, status, role } = useWalletContext();
+  const [tab,      setTab]      = useState("deposit");
   const [amount,   setAmount]   = useState("");
   const [balance,  setBalance]  = useState(null);
   const [loading,  setLoading]  = useState(false);
   const [balLoading, setBalLoading] = useState(false);
   const [error,    setError]    = useState("");
-  const [lastTx,   setLastTx]   = useState(null); // { tx_hash, action, amount }
+  const [lastTx,   setLastTx]   = useState(null);
 
   const fetchBalance = useCallback(async () => {
-    if (!ready) return;
+    if (!token) return;
     setBalLoading(true);
     try {
       const r = await fetch(`${API}/v1/disburse/balance`, {
-        headers: authHeaders(),
+        headers: { Authorization: `Bearer ${token}` },
       });
       const data = await r.json();
       if (r.ok) setBalance(data);
-    } catch {}
+      else setError(data.error || "Failed to load balance");
+    } catch (e) { setError(e.message); }
     setBalLoading(false);
-  }, [ready]);
+  }, [token]);
 
-  // Auto-load balance when wallet ready
+  // Auto-load balance once session is ready
   useEffect(() => {
-    if (ready) fetchBalance();
-  }, [ready]);
+    if (status === "ready" && token) fetchBalance();
+  }, [status, token]);
 
   async function submit() {
     setError(""); setLastTx(null);
-    if (!ready) return setError("Connect your wallet first");
+    if (!token) return setError("Please connect your wallet first");
     const amt = parseFloat(amount);
     if (!amt || isNaN(amt) || amt <= 0) return setError("Enter a valid amount");
 
@@ -136,7 +155,7 @@ export default function FundingPage() {
       const endpoint = tab === "deposit" ? "/v1/disburse/deposit" : "/v1/disburse/withdraw";
       const r = await fetch(`${API}${endpoint}`, {
         method: "POST",
-        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify({ amount_usd: amt }),
       });
       const data = await r.json();
@@ -157,7 +176,7 @@ export default function FundingPage() {
 
   return (<>
     <style>{CSS}</style>
-    <Nav active="Disburse" />
+    <Nav />
 
     <div style={{ minHeight:"100vh",background:"#030a06",padding:"96px 5% 60px",position:"relative",overflow:"hidden" }}>
       <Blob x="20%" y="20%" color="#34d399" size={500} />
@@ -171,12 +190,6 @@ export default function FundingPage() {
         <p style={{ color:"#64748b",marginBottom:32,fontSize:15,lineHeight:1.6 }}>
           Deposit cUSD into the ImpactChain contract to fund disbursements. Withdraw unspent funds at any time.
         </p>
-
-        {!ready && (
-          <div style={{ background:"rgba(52,211,153,.07)",border:"1px solid rgba(52,211,153,.15)",borderRadius:12,padding:"14px 18px",marginBottom:20,color:"#64748b",fontSize:13 }}>
-            🔒 Connect your wallet to fund disbursements.
-          </div>
-        )}
 
         {/* Balance card */}
         <BalanceCard balance={balance} loading={balLoading} onRefresh={fetchBalance} />
@@ -253,7 +266,7 @@ export default function FundingPage() {
             </div>
           )}
 
-          <button onClick={submit} disabled={loading || !amount || !ready}
+          <button onClick={submit} disabled={loading || !amount}
             className={tab === "withdraw" ? "btn-r" : "btn-p"}
             style={{ width:"100%",justifyContent:"center" }}>
             {loading

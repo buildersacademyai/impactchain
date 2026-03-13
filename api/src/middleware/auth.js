@@ -44,8 +44,8 @@ async function handleApiKey(token, req, res, next) {
   const hash = hashApiKey(token);
   const result = await db.query(
     `SELECT k.id, k.agency_id, k.scopes, k.expires_at, k.revoked,
-            a.name, a.wallet_address, a.organization_type,
-            a.contact_email, a.country, a.website, a.active
+            a.name, a.celo_address AS wallet_address, a.agency_type AS organization_type,
+            a.active
      FROM api_keys k
      JOIN agencies a ON k.agency_id = a.id
      WHERE k.key_hash = $1 LIMIT 1`,
@@ -59,7 +59,7 @@ async function handleApiKey(token, req, res, next) {
   db.query("UPDATE api_keys SET last_used_at = NOW() WHERE id = $1", [k.id]).catch(() => {});
   req.agency = {
     id: k.agency_id, wallet: k.wallet_address, name: k.name,
-    agency_type: k.agency_type, active: k.active,
+    organization_type: k.organization_type, active: k.active,
     scopes: k.scopes, auth_type: "api_key",
   };
   next();
@@ -70,7 +70,9 @@ function handleSession(token, req, res, next) {
     const decoded = jwt.verify(token.replace(/^ic_sess_/, ""), process.env.JWT_SECRET);
     req.agency = {
       id: decoded.id, wallet: decoded.wallet, name: decoded.name,
-      agency_type: decoded.agency_type || "NGO",
+      organization_type: decoded.organization_type || "NGO",
+      contact_email: decoded.contact_email || null,
+      country: decoded.country || null, website: decoded.website || null,
       role: decoded.role, active: true,
       scopes: ["read", "write"], auth_type: "wallet_session",
     };
@@ -85,8 +87,10 @@ function handleLegacyJwt(token, req, res, next) {
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     req.agency = {
-      id: decoded.id, wallet: decoded.address || decoded.wallet, name: decoded.name,
-      agency_type: decoded.agency_type || "NGO",
+      id: decoded.id, wallet: decoded.address, name: decoded.name,
+      organization_type: decoded.organization_type || "NGO",
+      contact_email: decoded.contact_email || null,
+      country: decoded.country || null, website: decoded.website || null,
       active: true, scopes: ["read", "write"], auth_type: "legacy_jwt",
     };
     next();

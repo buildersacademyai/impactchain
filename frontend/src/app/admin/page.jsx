@@ -50,7 +50,7 @@ function RoleDot({ val, label }) {
 function TxLink({ hash, label }) {
   if (!hash) return null;
   return (
-    <a href={`https://alfajores.celoscan.io/tx/${hash}`} target="_blank" rel="noreferrer"
+    <a href={`https://sepolia.celoscan.io/tx/${hash}`} target="_blank" rel="noreferrer"
       style={{ color:G,fontSize:11,textDecoration:"none",display:"inline-flex",alignItems:"center",gap:3 }}>
       {label || "View tx"} ↗
     </a>
@@ -72,6 +72,12 @@ export default function AdminPage() {
   const [approving,     setApproving]     = useState(false);
   const [approveResult, setApproveResult] = useState(null);
   const [approveErr,    setApproveErr]    = useState("");
+
+  // Reject state
+  const [rejectTarget, setRejectTarget] = useState(null); // { wallet, name }
+  const [rejectReason, setRejectReason] = useState("");
+  const [rejecting,    setRejecting]    = useState(false);
+  const [rejectErr,    setRejectErr]    = useState("");
 
   // Oracle service form
   const [oracleWallet,  setOracleWallet]  = useState("");
@@ -128,7 +134,7 @@ export default function AdminPage() {
       if (!r.ok) throw new Error(d.error || "Failed");
       setApproveResult(d);
       setApproveWallet(""); setApproveName("");
-      load();
+      setTimeout(() => load(), 1500);
     } catch (e) { setApproveErr(e.message); }
     setApproving(false);
   };
@@ -148,6 +154,23 @@ export default function AdminPage() {
     setActionLoading(p => ({ ...p, [wallet]: null }));
   };
 
+  const reject = async () => {
+    if (!rejectTarget) return;
+    setRejecting(true); setRejectErr("");
+    try {
+      const r = await fetch(`${API}/v1/admin/agency/reject`, {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify({ wallet: rejectTarget.wallet, reason: rejectReason }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "Reject failed");
+      setRejectTarget(null); setRejectReason("");
+      load(); // refresh list
+    } catch (e) { setRejectErr(e.message); }
+    finally { setRejecting(false); }
+  };
+
   const reApprove = async (wallet, name) => {
     setActionLoading(p => ({ ...p, [wallet]: "approving" }));
     try {
@@ -157,7 +180,7 @@ export default function AdminPage() {
       });
       const d = await r.json();
       setActionResults(p => ({ ...p, [wallet]: r.ok ? { tx: d.tx_hashes?.passport } : { err: d.error } }));
-      if (r.ok) load();
+      if (r.ok) setTimeout(() => load(), 1500); // wait for DB to update
     } catch (e) { setActionResults(p => ({ ...p, [wallet]: { err: e.message } })); }
     setActionLoading(p => ({ ...p, [wallet]: null }));
   };
@@ -192,8 +215,9 @@ export default function AdminPage() {
     setOracleLoading(false);
   };
 
-  const pendingApproval = agencies?.filter(a => !a.on_chain?.fully_approved) || [];
+  const pendingApproval  = agencies?.filter(a => !a.on_chain?.fully_approved && a.db_active !== false) || [];
   const approvedAgencies = agencies?.filter(a => a.on_chain?.fully_approved) || [];
+  const revokedAgencies  = agencies?.filter(a => !a.on_chain?.fully_approved && a.db_active === false) || [];
 
   // Guard: only admin can see this page
   if (status === "idle") return (<><style>{CSS}</style><Nav active="Admin" /><div style={{ minHeight:"100vh",background:"#030a06",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:14 }}><div style={{ fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:18,color:"#f0fdf4" }}>Connect your wallet</div><p style={{ color:"#64748b",fontSize:14 }}>Admin access requires the deployer wallet.</p></div></>);
@@ -309,11 +333,22 @@ export default function AdminPage() {
                         {actionResults[a.wallet_address]?.err && (
                           <div style={{ color:R,fontSize:11 }}>{actionResults[a.wallet_address].err}</div>
                         )}
-                        <button className="btn-p" style={{ marginTop:8 }}
-                          onClick={() => reApprove(a.wallet_address, a.name)}
-                          disabled={!!actionLoading[a.wallet_address]}>
-                          {actionLoading[a.wallet_address] === "approving" ? <><span className="spinner"/>Approving…</> : "Approve →"}
-                        </button>
+                        <div style={{ display:"flex", gap:8, marginTop:8 }}>
+                          <button className="btn-p" style={{ flex:1 }}
+                            onClick={() => reApprove(a.wallet_address, a.name)}
+                            disabled={!!actionLoading[a.wallet_address]}>
+                            {actionLoading[a.wallet_address] === "approving" ? <><span className="spinner"/>Approving…</> : "Approve →"}
+                          </button>
+                          <button
+                            onClick={() => { setRejectTarget({ wallet: a.wallet_address, name: a.name }); setRejectReason(""); setRejectErr(""); }}
+                            disabled={!!actionLoading[a.wallet_address]}
+                            style={{ flex:1, padding:"10px 16px", borderRadius:12, background:"rgba(248,113,113,.08)", border:"1px solid rgba(248,113,113,.25)", color:"#f87171", fontFamily:"'Syne',sans-serif", fontWeight:700, fontSize:13, cursor:"pointer", transition:"all .2s" }}
+                            onMouseEnter={e => e.currentTarget.style.background="rgba(248,113,113,.15)"}
+                            onMouseLeave={e => e.currentTarget.style.background="rgba(248,113,113,.08)"}
+                          >
+                            Reject ✕
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -376,7 +411,7 @@ export default function AdminPage() {
                               {pauseLoading[unpauseKey] ? <><span className="spinner"/>…</> : "▶ Unpause"}
                             </button>
                           )}
-                          <a href={`https://alfajores.celoscan.io/address/${c.address}`} target="_blank" rel="noreferrer"
+                          <a href={`https://sepolia.celoscan.io/address/${c.address}`} target="_blank" rel="noreferrer"
                             className="btn-g" style={{ textDecoration:"none",fontSize:11 }}>
                             Celoscan ↗
                           </a>
@@ -451,10 +486,88 @@ export default function AdminPage() {
                   </div>
                 )}
               </div>
+
+              {/* Revoked agencies */}
+              {revokedAgencies.length > 0 && (
+                <div className="card" style={{ padding:22 }}>
+                  <div className="section-title">
+                    🚫 Revoked Agencies
+                    <span style={{ background:"rgba(239,68,68,.1)",color:R,border:"1px solid rgba(239,68,68,.2)",padding:"2px 8px",borderRadius:100,fontSize:10,fontWeight:700 }}>
+                      {revokedAgencies.length}
+                    </span>
+                  </div>
+                  <div style={{ display:"flex",flexDirection:"column",gap:8,maxHeight:320,overflow:"auto" }}>
+                    {revokedAgencies.map(a => (
+                      <div key={a.id} className="row">
+                        <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6 }}>
+                          <div style={{ flex:1,minWidth:0 }}>
+                            <div style={{ fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:13,color:"#f0fdf4" }}>{a.name}</div>
+                            <div style={{ fontFamily:"monospace",fontSize:10,color:"#475569",marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>
+                              {a.wallet_address}
+                            </div>
+                          </div>
+                          <span className="tag tag-r" style={{ flexShrink:0,marginLeft:8 }}>Revoked</span>
+                        </div>
+                        {actionResults[a.wallet_address]?.err && (
+                          <div style={{ color:R,fontSize:11,marginBottom:6 }}>{actionResults[a.wallet_address].err}</div>
+                        )}
+                        <button className="btn-p" style={{ fontSize:11,padding:"5px 12px" }}
+                          onClick={() => reApprove(a.wallet_address, a.name)}
+                          disabled={!!actionLoading[a.wallet_address]}>
+                          {actionLoading[a.wallet_address] === "approving"
+                            ? <><span className="spinner"/>Re-approving…</>
+                            : "Re-approve →"}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
       </div>
     </div>
+
+    {/* ── Reject confirmation modal ──────────────────────────────────────── */}
+    {rejectTarget && (
+      <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,.75)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 20px" }}
+        onClick={e => e.target === e.currentTarget && setRejectTarget(null)}>
+        <div style={{ background:"#0f1a12",border:"1px solid rgba(248,113,113,.25)",borderRadius:20,padding:32,maxWidth:440,width:"100%",animation:"fadeUp .2s ease both" }}>
+          <div style={{ fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:18,color:"#f0fdf4",marginBottom:4 }}>Reject Agency</div>
+          <div style={{ fontSize:13,color:"#64748b",marginBottom:20 }}>
+            This will mark <span style={{ color:"#f87171",fontWeight:600 }}>{rejectTarget.name}</span> as rejected. They will see a rejection notice on their dashboard.
+          </div>
+          <div style={{ background:"rgba(255,255,255,.03)",border:"1px solid rgba(255,255,255,.07)",borderRadius:12,padding:"10px 14px",fontFamily:"monospace",fontSize:11,color:"#475569",marginBottom:20,wordBreak:"break-all" }}>
+            {rejectTarget.wallet}
+          </div>
+          <div style={{ marginBottom:20 }}>
+            <label style={{ display:"block",fontSize:11,fontWeight:600,color:"#64748b",letterSpacing:".06em",textTransform:"uppercase",marginBottom:7 }}>Reason (optional)</label>
+            <input
+              className="ic-input"
+              placeholder="e.g. Unverified organization, duplicate registration…"
+              value={rejectReason}
+              onChange={e => setRejectReason(e.target.value)}
+            />
+          </div>
+          {rejectErr && <div style={{ color:"#f87171",fontSize:12,marginBottom:14 }}>{rejectErr}</div>}
+          <div style={{ display:"flex",gap:10 }}>
+            <button
+              onClick={() => setRejectTarget(null)}
+              style={{ flex:1,padding:"11px 0",borderRadius:12,background:"transparent",border:"1px solid rgba(255,255,255,.1)",color:"#94a3b8",fontFamily:"'Syne',sans-serif",fontWeight:600,fontSize:14,cursor:"pointer" }}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={reject}
+              disabled={rejecting}
+              style={{ flex:1,padding:"11px 0",borderRadius:12,background:"rgba(248,113,113,.12)",border:"1px solid rgba(248,113,113,.3)",color:"#f87171",fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:14,cursor:"pointer",opacity:rejecting?0.5:1 }}
+            >
+              {rejecting ? "Rejecting…" : "Confirm Reject"}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
   </>);
 }

@@ -1,4 +1,4 @@
-const { createWalletClient, createPublicClient, http } = require("viem");
+const { createWalletClient, createPublicClient, http, fallback } = require("viem");
 const { privateKeyToAccount } = require("viem/accounts");
 
 // Celo Sepolia Testnet — chain ID 11142220
@@ -9,8 +9,8 @@ const celoSepolia = {
   network: "celo-sepolia",
   nativeCurrency: { name: "Celo", symbol: "CELO", decimals: 18 },
   rpcUrls: {
-    default: { http: ["https://forno.celo-sepolia.celo-testnet.org"] },
-    public:  { http: ["https://forno.celo-sepolia.celo-testnet.org"] },
+    default: { http: ["https://forno.celo-sepolia.celo-testnet.org", "https://celo-sepolia.drpc.org"] },
+    public:  { http: ["https://forno.celo-sepolia.celo-testnet.org", "https://celo-sepolia.drpc.org"] },
   },
   blockExplorers: {
     default: { name: "Celoscan", url: "https://sepolia.celoscan.io" },
@@ -47,9 +47,17 @@ function createViem() {
 }
 
 function createPublicViem() {
+  const rpc = process.env.CELO_RPC_URL;
+  const isSepolia = !rpc || rpc.includes("sepolia");
   return createPublicClient({
     chain: getChain(),
-    transport: http(process.env.CELO_RPC_URL),
+    // fallback tries primary RPC first, then backup if it fails
+    transport: fallback([
+      http(rpc),
+      http(isSepolia
+        ? "https://celo-sepolia.drpc.org"
+        : "https://celo.drpc.org"),
+    ]),
   });
 }
 

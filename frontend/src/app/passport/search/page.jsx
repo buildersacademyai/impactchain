@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect, useCallback } from "react";
-import { useWalletContext } from "../../../../context/WalletContext";
-import Nav from "../../../../components/Nav";
+import { useWalletContext } from "../../../context/WalletContext";
+import Nav from "../../../components/Nav";
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 const G = "#34d399";
 

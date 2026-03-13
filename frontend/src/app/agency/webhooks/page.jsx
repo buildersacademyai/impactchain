@@ -1,5 +1,5 @@
 "use client";
-import { useDashboardLink } from "../../../../hooks/useDashboardLink";
+import { useDashboardLink } from "../../../hooks/useDashboardLink";
 import React, { useState, useEffect, useCallback } from "react";
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 const G = "#34d399";

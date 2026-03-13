@@ -63,7 +63,7 @@ function LoadingView({ status }) {
           <div style={{ fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:16,color:"#f0fdf4",marginBottom:8 }}>Taking longer than expected</div>
           <div style={{ fontSize:13,color:"#64748b",marginBottom:24,maxWidth:360 }}>The verification timed out. Your wallet may be waiting for a signature, or the API may be unreachable.</div>
           <button
-            onClick={() => window.location.reload()}
+            onClick={() => { localStorage.removeItem("ic_session_v2"); window.location.reload(); }}
             style={{ padding:"10px 24px",borderRadius:12,background:"linear-gradient(135deg,#34d399,#059669)",color:"#022c22",fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:14,border:"none",cursor:"pointer" }}
           >
             Reload Page
@@ -98,8 +98,38 @@ function NotConnectedView() {
 }
 
 
+
+// ── Rejected view ──────────────────────────────────────────────────────────────
+function RejectedView({ wallet }) {
+  return (
+    <div style={{ minHeight:"100vh",background:"#030a06",display:"flex",alignItems:"center",justifyContent:"center",padding:"0 5%",position:"relative",overflow:"hidden" }}>
+      <div style={{ position:"absolute",left:"50%",top:"30%",width:500,height:500,borderRadius:"50%",background:"#f87171",filter:"blur(120px)",opacity:.06,pointerEvents:"none" }} />
+      <div style={{ maxWidth:500,width:"100%",textAlign:"center",position:"relative",zIndex:2 }}>
+        <div style={{ width:72,height:72,borderRadius:20,background:"rgba(248,113,113,.08)",border:"1px solid rgba(248,113,113,.2)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:32,margin:"0 auto 24px" }}>🚫</div>
+        <div style={{ display:"inline-flex",alignItems:"center",gap:7,padding:"5px 14px",borderRadius:100,background:"rgba(248,113,113,.08)",border:"1px solid rgba(248,113,113,.2)",color:"#f87171",fontSize:11,fontWeight:600,letterSpacing:".08em",textTransform:"uppercase",marginBottom:16 }}>Registration Rejected</div>
+        <h2 style={{ fontFamily:"'Syne',sans-serif",fontSize:26,fontWeight:800,color:"#f0fdf4",letterSpacing:"-.02em",marginBottom:12 }}>
+          Your registration was not approved
+        </h2>
+        <p style={{ color:"#64748b",fontSize:14,lineHeight:1.7,marginBottom:28 }}>
+          An ImpactChain admin has reviewed your registration and was unable to approve it at this time. This may be due to incomplete information or an unverified organization.
+        </p>
+        <div style={{ background:"rgba(255,255,255,.02)",border:"1px solid rgba(255,255,255,.07)",borderRadius:12,padding:"12px 16px",marginBottom:28,textAlign:"left" }}>
+          <div style={{ fontSize:11,fontWeight:600,color:"#64748b",letterSpacing:".06em",textTransform:"uppercase",marginBottom:6 }}>Wallet</div>
+          <div style={{ fontFamily:"monospace",fontSize:12,color:"#475569",wordBreak:"break-all" }}>{wallet}</div>
+        </div>
+        <p style={{ color:"#475569",fontSize:13,marginBottom:24 }}>
+          If you believe this is an error, please contact <span style={{ color:"#34d399" }}>support@impactchain.xyz</span> with your organization details.
+        </p>
+        <a href="/agency/register" style={{ display:"inline-flex",alignItems:"center",gap:8,padding:"12px 28px",borderRadius:12,background:"transparent",border:"1px solid rgba(255,255,255,.12)",color:"#94a3b8",fontFamily:"'Syne',sans-serif",fontWeight:600,fontSize:14,textDecoration:"none" }}>
+          Re-register with a different wallet
+        </a>
+      </div>
+    </div>
+  );
+}
+
 // ── Pending Approval view ──────────────────────────────────────────────────────
-function PendingView({ wallet }) {
+function PendingView({ wallet, onCheckStatus }) {
   const G = "#34d399";
   return (
     <div style={{ minHeight:"100vh",background:"#030a06",display:"flex",alignItems:"center",justifyContent:"center",padding:"0 5%",position:"relative",overflow:"hidden" }}>
@@ -134,7 +164,7 @@ function PendingView({ wallet }) {
         </div>
 
         <div style={{ display:"flex",gap:12,justifyContent:"center",flexWrap:"wrap" }}>
-          <button onClick={() => window.location.reload()} style={{ display:"inline-flex",alignItems:"center",gap:7,padding:"11px 22px",borderRadius:12,background:"transparent",color:"#94a3b8",fontFamily:"'Syne',sans-serif",fontWeight:600,fontSize:14,border:"1px solid rgba(255,255,255,.12)",cursor:"pointer" }}>
+          <button onClick={onCheckStatus} style={{ display:"inline-flex",alignItems:"center",gap:7,padding:"11px 22px",borderRadius:12,background:"transparent",color:"#94a3b8",fontFamily:"'Syne',sans-serif",fontWeight:600,fontSize:14,border:"1px solid rgba(255,255,255,.12)",cursor:"pointer" }}>
             ↻ Check Status
           </button>
           <a href="/transparency" style={{ display:"inline-flex",alignItems:"center",gap:7,padding:"11px 22px",borderRadius:12,background:"transparent",color:"#94a3b8",fontFamily:"'Syne',sans-serif",fontWeight:600,fontSize:14,border:"1px solid rgba(255,255,255,.12)",textDecoration:"none" }}>
@@ -237,7 +267,7 @@ function DashboardView({ wallet, role, agency: walletAgency }) {
     { l:"Passports",     v: stats?.passports     ?? "—", c:"#60a5fa" },
     { l:"Disbursements", v: stats?.disbursements ?? "—", c:"#34d399" },
     { l:"Oracles",       v: stats?.oracles       ?? "—", c:"#a78bfa" },
-    { l:"Agencies",      v: stats?.agencies      ?? "—", c:"#2dd4bf" },
+    ...(isAdmin ? [{ l:"Agencies", v: stats?.agencies ?? "—", c:"#2dd4bf" }] : []),
   ];
 
   return (
@@ -345,7 +375,13 @@ function DashboardView({ wallet, role, agency: walletAgency }) {
 
 // ── Root page — switches view based on wallet state ───────────────────────────
 export default function DashboardPage() {
-  const { wallet, role, agency, status, isConnected } = useWalletContext();
+  const { wallet, role, agency, status, isConnected, disconnect } = useWalletContext();
+
+  const checkStatus = () => {
+    // Clear cached session so next load re-detects role fresh from chain
+    localStorage.removeItem("ic_session_v2");
+    window.location.reload();
+  };
 
   // Redirect admin to /admin
   useEffect(() => {
@@ -361,8 +397,10 @@ export default function DashboardPage() {
       ? <NotConnectedView />
       : status === "signing" || status === "verifying" || status === "idle"
         ? <LoadingView status={status} />
-        : role === "pending"
-          ? <PendingView wallet={wallet} />
+        : role === "rejected"
+          ? <RejectedView wallet={wallet} />
+          : role === "pending"
+          ? <PendingView wallet={wallet} onCheckStatus={checkStatus} />
           : role === "unregistered" || !role
             ? <UnregisteredView wallet={wallet} />
             : <DashboardView wallet={wallet} role={role} agency={agency} />

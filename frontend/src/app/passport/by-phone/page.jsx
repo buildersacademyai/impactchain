@@ -1,8 +1,8 @@
 "use client";
 import { useState } from "react";
-import { useWalletContext } from "../../../../context/WalletContext";
-import Nav from "../../../../components/Nav";
-import { useDashboardLink } from "../../../../hooks/useDashboardLink";
+import { useWalletContext } from "../../../context/WalletContext";
+import Nav from "../../../components/Nav";
+import { useDashboardLink } from "../../../hooks/useDashboardLink";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 

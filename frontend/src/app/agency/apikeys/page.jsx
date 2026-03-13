@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect } from "react";
-import { useAuthFetch } from "../../hooks/useAuthFetch";
-import WalletButton from "../../components/WalletButton";
+import { useAuthFetch } from "../../../hooks/useAuthFetch";
+import WalletButton from "../../../components/WalletButton";
 
 const G = "#34d399";
 const R = "#f87171";
@@ -52,6 +52,26 @@ export default function ApiKeysPage() {
   const [errors,   setErrors]   = useState({});
   const [rotating, setRotating] = useState({});
   const [revoking, setRevoking] = useState({});
+  const [copied,   setCopied]   = useState(false);
+
+  const copyKey = async (text) => {
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const el = document.createElement("textarea");
+        el.value = text;
+        el.style.position = "fixed";
+        el.style.opacity = "0";
+        document.body.appendChild(el);
+        el.focus(); el.select();
+        document.execCommand("copy");
+        document.body.removeChild(el);
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch (e) { console.error("Copy failed:", e); }
+  };
 
   const load = async () => {
     if (!wallet) return;
@@ -137,7 +157,7 @@ export default function ApiKeysPage() {
             <div style={{ fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:13,color:G,marginBottom:8 }}>⚠ Save your API key — shown only once</div>
             <div style={{ fontFamily:"monospace",fontSize:12,color:"#f0fdf4",background:"rgba(0,0,0,.4)",padding:"10px 14px",borderRadius:9,wordBreak:"break-all",marginBottom:10 }}>{newKey}</div>
             <div style={{ display:"flex",gap:8 }}>
-              <button className="btn-p" onClick={() => { navigator.clipboard.writeText(newKey); }}>Copy Key</button>
+              <button className="btn-p" onClick={() => copyKey(newKey)} style={{ borderColor: copied ? "rgba(52,211,153,.5)" : undefined }}>{copied ? "✓ Copied!" : "Copy Key"}</button>
               <button className="btn-g" onClick={() => setNewKey(null)}>Dismiss</button>
             </div>
           </div>
