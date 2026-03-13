@@ -65,6 +65,13 @@ app.listen(PORT, () => {
   console.log(`   Environment: ${process.env.NODE_ENV}`);
   console.log(`   Network:     ${process.env.CELO_RPC_URL?.includes("sepolia") ? "Celo Sepolia (testnet)" : "Celo Mainnet"}`);
   console.log(`   Health:      http://localhost:${PORT}/health\n`);
+
+  // Start oracle trigger worker (skip in test environment)
+  if (process.env.NODE_ENV !== "test") {
+    const oracleTrigger = require("./services/oracleTrigger");
+    const intervalMs = parseInt(process.env.ORACLE_POLL_INTERVAL_MS || "60000");
+    oracleTrigger.start(intervalMs);
+  }
 });
 
 module.exports = app;

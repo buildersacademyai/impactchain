@@ -50,7 +50,31 @@ export default function RegisterPage() {
   const [status, setStatus] = useState("idle");
   const [err, setErr] = useState("");
   const [apiKey, setApiKey] = useState("");
+  const [copied, setCopied] = useState(false);
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
+
+  const copyKey = async () => {
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(apiKey);
+      } else {
+        // Fallback for non-HTTPS / local IP
+        const el = document.createElement("textarea");
+        el.value = apiKey;
+        el.style.position = "fixed";
+        el.style.opacity = "0";
+        document.body.appendChild(el);
+        el.focus();
+        el.select();
+        document.execCommand("copy");
+        document.body.removeChild(el);
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch (e) {
+      console.error("Copy failed:", e);
+    }
+  };
 
   const submit = async () => {
     setStatus("loading"); setErr("");
@@ -92,7 +116,7 @@ export default function RegisterPage() {
             <p style={{ color:"#94a3b8",fontSize:14,marginBottom:20 }}>Save your API key — it will not be shown again.</p>
             <div style={{ background:"rgba(0,0,0,.5)",border:"1px solid rgba(52,211,153,.25)",borderRadius:12,padding:"14px 16px",fontFamily:"monospace",fontSize:13,color:G,wordBreak:"break-all",marginBottom:16 }}>{apiKey}</div>
             <div style={{ display:"flex",flexDirection:"column",gap:10 }}>
-              <button onClick={() => navigator.clipboard.writeText(apiKey)} className="btn-g" style={{ justifyContent:"center" }}>Copy API Key</button>
+              <button onClick={copyKey} className="btn-g" style={{ justifyContent:"center", borderColor: copied ? "rgba(52,211,153,.5)" : undefined, color: copied ? "#34d399" : undefined }}>{copied ? "✓ Copied!" : "Copy API Key"}</button>
               <a href="/agency/dashboard" className="btn-p" style={{ justifyContent:"center",textDecoration:"none" }}>Go to Dashboard</a>
             </div>
           </div>

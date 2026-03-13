@@ -19,21 +19,37 @@ const CSS = `
   .ic-input{width:100%;padding:10px 14px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:10px;color:#f0fdf4;font-size:14px;outline:none;transition:border-color .2s;font-family:'DM Sans',sans-serif}
   .ic-input:focus{border-color:rgba(52,211,153,.5)}
   .ic-input::placeholder{color:#475569}
+  .ic-input:disabled{opacity:.4;cursor:not-allowed}
   .btn-p{display:inline-flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:12px 20px;border-radius:11px;background:linear-gradient(135deg,#34d399,#059669);color:#022c22;font-family:'Syne',sans-serif;font-weight:700;font-size:14px;border:none;cursor:pointer;transition:transform .15s}
   .btn-p:hover{transform:translateY(-1px)}
   .btn-p:disabled{opacity:.45;cursor:not-allowed;transform:none}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
   @media(max-width:600px){.grid2{grid-template-columns:1fr}}
+  .privacy-note{display:flex;align-items:flex-start;gap:10px;padding:12px 14px;background:rgba(52,211,153,.05);border:1px solid rgba(52,211,153,.12);border-radius:10px;font-size:12px;color:#64748b;line-height:1.5}
 `;
 
+const DISTRICTS = [
+  "Achham","Arghakhanchi","Baglung","Baitadi","Bajhang","Bajura","Banke","Bara",
+  "Bardiya","Bhaktapur","Bhojpur","Chitwan","Dadeldhura","Dailekh","Dang","Darchula",
+  "Dhading","Dhankuta","Dhanusa","Dolakha","Dolpa","Doti","Eastern Rukum","Gorkha",
+  "Gulmi","Humla","Ilam","Jajarkot","Jhapa","Jumla","Kailali","Kalikot","Kanchanpur",
+  "Kapilvastu","Kaski","Kathmandu","Kavrepalanchok","Khotang","Lalitpur","Lamjung",
+  "Mahottari","Makwanpur","Manang","Morang","Mugu","Mustang","Myagdi","Nawalparasi East",
+  "Nawalparasi West","Nuwakot","Okhaldhunga","Palpa","Panchthar","Parbat","Parsa",
+  "Pyuthan","Ramechhap","Rasuwa","Rautahat","Rolpa","Rupandehi","Salyan","Sankhuwasabha",
+  "Saptari","Sarlahi","Sindhuli","Sindhupalchok","Siraha","Solukhumbu","Sunsari",
+  "Surkhet","Syangja","Tanahu","Taplejung","Terhathum","Udayapur","Western Rukum",
+];
+
 export default function RegisterPassportPage() {
-  const { token, status, isConnected } = useWalletContext();
+  const { authHeaders, status, isConnected } = useWalletContext();
   const { href: dashHref, label: dashLabel } = useDashboardLink();
 
   const [form, setForm] = useState({
-    name: "", phone: "", nationality: "",
-    date_of_birth: "", gender: "", district: "",
-    household_size: 1, children_count: 0,
+    phone: "",
+    district: "",
+    household_size: 1,
+    children_count: 0,
   });
   const [loading, setLoading] = useState(false);
   const [result,  setResult]  = useState(null);
@@ -43,18 +59,23 @@ export default function RegisterPassportPage() {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!token) { setError("Please connect your wallet first"); return; }
+    if (!form.phone.trim()) { setError("Phone number is required"); return; }
     setLoading(true); setError(null); setResult(null);
     try {
       const res = await fetch(`${API}/v1/passport`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify(form),
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({
+          phone:          form.phone.trim(),
+          district:       form.district || undefined,
+          household_size: form.household_size,
+          children_count: form.children_count,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to register passport");
       setResult(data);
-      setForm({ name:"", phone:"", nationality:"", date_of_birth:"", gender:"", district:"", household_size:1, children_count:0 });
+      setForm({ phone:"", district:"", household_size:1, children_count:0 });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -69,12 +90,12 @@ export default function RegisterPassportPage() {
     <Nav active="Passports" />
 
     <div style={{ minHeight:"100vh", background:"#030a06", padding:"88px 5% 60px" }}>
-      <div style={{ maxWidth:640, margin:"0 auto" }} className="fade-up">
+      <div style={{ maxWidth:580, margin:"0 auto" }} className="fade-up">
 
-        {/* Header */}
         <a href={dashHref} style={{ color:"#64748b", fontSize:13, textDecoration:"none", display:"inline-block", marginBottom:20 }}>
           ← {dashLabel}
         </a>
+
         <div style={{ marginBottom:28 }}>
           <div style={{ display:"inline-flex",alignItems:"center",gap:6,padding:"3px 12px",borderRadius:100,background:"rgba(52,211,153,.08)",border:"1px solid rgba(52,211,153,.15)",color:"#34d399",fontSize:10,fontWeight:700,letterSpacing:".06em",textTransform:"uppercase",marginBottom:10 }}>
             Passport Registry
@@ -83,74 +104,83 @@ export default function RegisterPassportPage() {
             Register Beneficiary
           </h1>
           <p style={{ color:"#64748b",fontSize:14,marginTop:6,lineHeight:1.6 }}>
-            Creates a W3C DID on Celo. No PII stored on-chain — only a hash of the phone number.
+            Creates a W3C DID on Celo Sepolia. The phone number is hashed before storage — no raw PII goes on-chain.
           </p>
         </div>
 
-        {/* Wallet warning */}
         {notReady && (
           <div style={{ padding:"14px 18px",background:"rgba(251,191,36,.06)",border:"1px solid rgba(251,191,36,.2)",borderRadius:12,color:"#fbbf24",fontSize:13,marginBottom:20 }}>
             ⚠ Connect your wallet via the top-right button to register passports.
           </div>
         )}
 
-        {/* Form */}
         <div className="card" style={{ padding:24 }}>
           <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
 
-            <div className="grid2">
-              <div>
-                <label className="ic-label">Full Name</label>
-                <input className="ic-input" placeholder="Asha Tamang" value={form.name}
-                  onChange={e => set("name", e.target.value)} />
-              </div>
-              <div>
-                <label className="ic-label">Phone Number *</label>
-                <input className="ic-input" placeholder="+977-9801234567" value={form.phone}
-                  onChange={e => set("phone", e.target.value)} required />
-              </div>
-            </div>
-
-            <div className="grid2">
-              <div>
-                <label className="ic-label">Nationality</label>
-                <input className="ic-input" placeholder="Nepali" value={form.nationality}
-                  onChange={e => set("nationality", e.target.value)} />
-              </div>
-              <div>
-                <label className="ic-label">Date of Birth</label>
-                <input className="ic-input" type="date" value={form.date_of_birth}
-                  onChange={e => set("date_of_birth", e.target.value)} />
+            {/* Phone — only required field */}
+            <div>
+              <label className="ic-label">Phone Number <span style={{ color:"#f87171" }}>*</span></label>
+              <input
+                className="ic-input"
+                placeholder="+977-9801234567"
+                value={form.phone}
+                onChange={e => set("phone", e.target.value)}
+                disabled={notReady}
+              />
+              <div style={{ marginTop:5,fontSize:11,color:"#475569" }}>
+                Stored as <code style={{ color:"#64748b" }}>keccak256(phone)</code> — irreversible hash, no raw number on-chain.
               </div>
             </div>
 
-            <div className="grid2">
-              <div>
-                <label className="ic-label">Gender</label>
-                <select className="ic-input" value={form.gender} onChange={e => set("gender", e.target.value)}
-                  style={{ cursor:"pointer" }}>
-                  <option value="">Select</option>
-                  <option>Male</option><option>Female</option><option>Other</option><option>Prefer not to say</option>
-                </select>
-              </div>
-              <div>
-                <label className="ic-label">District</label>
-                <input className="ic-input" placeholder="e.g. Sindhupalchok" value={form.district}
-                  onChange={e => set("district", e.target.value)} />
-              </div>
+            {/* District */}
+            <div>
+              <label className="ic-label">District</label>
+              <select
+                className="ic-input"
+                value={form.district}
+                onChange={e => set("district", e.target.value)}
+                disabled={notReady}
+                style={{ cursor:"pointer" }}
+              >
+                <option value="">Select district (optional)</option>
+                {DISTRICTS.map(d => <option key={d} value={d}>{d}</option>)}
+              </select>
             </div>
 
             <div className="grid2">
               <div>
                 <label className="ic-label">Household Size</label>
-                <input className="ic-input" type="number" min="1" max="30" value={form.household_size}
-                  onChange={e => set("household_size", parseInt(e.target.value)||1)} />
+                <input
+                  className="ic-input"
+                  type="number"
+                  min="1"
+                  max="30"
+                  value={form.household_size}
+                  onChange={e => set("household_size", parseInt(e.target.value) || 1)}
+                  disabled={notReady}
+                />
               </div>
               <div>
                 <label className="ic-label">Children Under 18</label>
-                <input className="ic-input" type="number" min="0" max="20" value={form.children_count}
-                  onChange={e => set("children_count", parseInt(e.target.value)||0)} />
+                <input
+                  className="ic-input"
+                  type="number"
+                  min="0"
+                  max="20"
+                  value={form.children_count}
+                  onChange={e => set("children_count", parseInt(e.target.value) || 0)}
+                  disabled={notReady}
+                />
               </div>
+            </div>
+
+            {/* Privacy note */}
+            <div className="privacy-note">
+              <span style={{ fontSize:16, flexShrink:0 }}>🔒</span>
+              <span>
+                Only <strong style={{ color:"#94a3b8" }}>district, household size, and children count</strong> are stored on-chain.
+                No names, dates of birth, or identifying information. Sensitive credentials are issued separately via IPFS.
+              </span>
             </div>
 
             {error && (
@@ -160,12 +190,11 @@ export default function RegisterPassportPage() {
             )}
 
             <button className="btn-p" onClick={handleSubmit} disabled={loading || notReady}>
-              {loading ? <><span className="spinner"/>Creating passport on Celo…</> : "Create Beneficiary Passport →"}
+              {loading ? <><span className="spinner" />Creating passport on Celo…</> : "Create Beneficiary Passport →"}
             </button>
           </div>
         </div>
 
-        {/* Success */}
         {result && (
           <div className="card fade-up" style={{ padding:24,marginTop:20,borderColor:"rgba(52,211,153,.25)",background:"rgba(52,211,153,.04)" }}>
             <div style={{ fontFamily:"'Syne',sans-serif",fontWeight:700,color:"#34d399",marginBottom:14,fontSize:15 }}>
@@ -185,8 +214,16 @@ export default function RegisterPassportPage() {
                 </div>
               ))}
             </div>
-            <div style={{ marginTop:14,paddingTop:14,borderTop:"1px solid rgba(52,211,153,.15)",color:"#64748b",fontSize:12,lineHeight:1.6 }}>
-              Share this DID with other agencies to look up this beneficiary's history.
+            <div style={{ marginTop:14,paddingTop:14,borderTop:"1px solid rgba(52,211,153,.15)",display:"flex",gap:10 }}>
+              <a href={`/passport/credentials?did=${encodeURIComponent(result.did)}`}
+                style={{ fontSize:12,color:"#34d399",textDecoration:"none" }}>
+                Issue credentials →
+              </a>
+              <span style={{ color:"#475569" }}>·</span>
+              <a href="/passport/register"
+                style={{ fontSize:12,color:"#64748b",textDecoration:"none" }}>
+                Register another
+              </a>
             </div>
           </div>
         )}

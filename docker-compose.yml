@@ -23,20 +23,6 @@ services:
       timeout: 5s
       retries: 5
 
-  # ── Redis ──────────────────────────────────────────────────────────
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    volumes:
-      - redis_data:/data
-    ports:
-      - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   # ── API ────────────────────────────────────────────────────────────
   api:
     build:
@@ -49,10 +35,11 @@ services:
       NODE_ENV:                     production
       PORT:                         3001
       DATABASE_URL:                 postgresql://postgres:${POSTGRES_PASSWORD:-changeme}@postgres:5432/impactchain
-      REDIS_URL:                    redis://redis:6379
       JWT_SECRET:                   ${JWT_SECRET}
-      CELO_RPC_URL:                 ${CELO_RPC_URL:-https://alfajores-forno.celo-testnet.org}
+      CELO_RPC_URL:                 ${CELO_RPC_URL:-https://forno.celo-sepolia.celo-testnet.org}
       PRIVATE_KEY:                  ${PRIVATE_KEY}
+      DEPLOYER_ADDRESS:             ${DEPLOYER_ADDRESS}
+      ORACLE_POLL_INTERVAL_MS:      ${ORACLE_POLL_INTERVAL_MS:-60000}
       PASSPORT_REGISTRY_ADDRESS:    ${PASSPORT_REGISTRY_ADDRESS}
       DISBURSE_ADDRESS:             ${DISBURSE_ADDRESS}
       ORACLE_CORE_ADDRESS:          ${ORACLE_CORE_ADDRESS}
@@ -60,8 +47,6 @@ services:
       FRONTEND_URL:                 ${FRONTEND_URL:-http://localhost:3000}
     depends_on:
       postgres:
-        condition: service_healthy
-      redis:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
@@ -79,7 +64,7 @@ services:
       - "3000:3000"
     environment:
       NEXT_PUBLIC_API_URL:                      ${NEXT_PUBLIC_API_URL:-http://localhost:3001}
-      NEXT_PUBLIC_CELO_CHAIN:                   ${NEXT_PUBLIC_CELO_CHAIN:-alfajores}
+      NEXT_PUBLIC_CELO_CHAIN:                   ${NEXT_PUBLIC_CELO_CHAIN:-celoSepolia}
       NEXT_PUBLIC_PASSPORT_REGISTRY_ADDRESS:    ${PASSPORT_REGISTRY_ADDRESS}
       NEXT_PUBLIC_DISBURSE_ADDRESS:             ${DISBURSE_ADDRESS}
       NEXT_PUBLIC_ORACLE_CORE_ADDRESS:          ${ORACLE_CORE_ADDRESS}
@@ -89,4 +74,3 @@ services:
 
 volumes:
   postgres_data:
-  redis_data:

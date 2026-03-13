@@ -23,48 +23,63 @@ export function WalletProvider({ children }) {
   const userClickedConnectRef = useRef(false);
   const signingRef            = useRef(false);
   const sessionRestoredRef    = useRef(false);
+  // Set synchronously before any effect runs — true if valid session in localStorage
+  const hasSessionRef         = useRef(!!loadSession());
 
   // ── Mount: restore session, then do background role refresh ─────────────────
   useEffect(() => {
     const saved = loadSession();
     if (!saved) {
       sessionRestoredRef.current = true;
+      setStatus("idle");
       return;
     }
-    // Restore cached values immediately
+    // Restore cached values immediately — show UI right away, don't block on spinner
     setToken(saved.token);
     setRole(saved.role);
     setAgency(saved.agency);
-    setStatus("refreshing"); // show spinner briefly while we verify role
+    setStatus("ready"); // ← show cached content immediately, refresh silently
+    hasSessionRef.current = true;
+    sessionRestoredRef.current = true;
 
-    // Re-verify role from chain via /auth/me
-    fetch(`${API}/v1/auth/me`, { headers: { Authorization: `Bearer ${saved.token}` } })
-      .then(r => r.ok ? r.json() : Promise.reject())
+    // Background re-verify with a 5s timeout — update role silently if changed
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+
+    fetch(`${API}/v1/auth/me`, {
+      headers: { Authorization: `Bearer ${saved.token}` },
+      signal: controller.signal,
+    })
+      .then(r => r.ok ? r.json() : Promise.reject(new Error("not_ok")))
       .then(d => {
-        setRole(d.role);          // ← correct role from chain
+        clearTimeout(timeout);
+        setRole(d.role);
         if (d.agency) setAgency(d.agency);
         storeSession(saved.token, d.role, d.agency || saved.agency, saved.wallet);
-        setStatus("ready");
+        // status stays "ready" — no flicker
       })
-      .catch(() => {
-        // Token expired — clear and let user reconnect
+      .catch(err => {
+        clearTimeout(timeout);
+        if (err.name === "AbortError") {
+          // API slow / offline — keep cached session, let user use the app
+          return;
+        }
+        // Token genuinely expired (401) — clear and force re-login
         localStorage.removeItem(SESSION_KEY);
+        hasSessionRef.current = false;
         setStatus("idle"); setToken(null); setRole(null); setAgency(null);
-      })
-      .finally(() => {
-        sessionRestoredRef.current = true;
       });
   }, []);
 
-  // ── Watch for wallet connect ONLY after user clicked Connect button ──────────
+  // ── Auto sign-in when wallet connected but NO valid session ────────────────
   useEffect(() => {
-    if (!sessionRestoredRef.current) return;
-    if (!isConnected || !address) return;
-    if (status === "ready" || status === "refreshing") return;
-    if (signingRef.current) return;
-    if (!userClickedConnectRef.current) return; // key guard — never auto-sign
+    if (!sessionRestoredRef.current) return; // wait for localStorage restore
+    if (!isConnected || !address) return;    // wallet not connected
+    if (hasSessionRef.current) return;       // valid session exists — don't re-sign
+    if (status === "ready") return;          // already authenticated
+    if (signingRef.current) return;          // already in progress
+    if (status === "signing" || status === "verifying") return; // already running
 
-    userClickedConnectRef.current = false;
     doSignIn(address.toLowerCase());
   }, [isConnected, address, status]);
 
@@ -85,11 +100,19 @@ export function WalletProvider({ children }) {
       const signature = await signMessageAsync({ message: nd.message });
       setStatus("verifying");
 
-      const verifyRes = await fetch(`${API}/v1/auth/verify`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ wallet: addrLower, signature }),
-      });
+      const verifyCtrl = new AbortController();
+      const verifyTimeout = setTimeout(() => verifyCtrl.abort(), 15000);
+      let verifyRes;
+      try {
+        verifyRes = await fetch(`${API}/v1/auth/verify`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ wallet: addrLower, signature }),
+          signal: verifyCtrl.signal,
+        });
+      } finally {
+        clearTimeout(verifyTimeout);
+      }
       const vd = await verifyRes.json();
       if (!verifyRes.ok) throw new Error(vd.error || "Verify failed");
 
@@ -119,6 +142,7 @@ export function WalletProvider({ children }) {
 
   const disconnect = useCallback(() => {
     localStorage.removeItem(SESSION_KEY);
+    hasSessionRef.current = false;
     signingRef.current = false;
     userClickedConnectRef.current = false;
     setToken(null); setRole(null); setAgency(null);

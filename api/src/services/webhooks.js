@@ -40,11 +40,10 @@ async function fire(agencyWallet, event, data) {
   let hooks = [];
   try {
     const result = await db.query(
-      `SELECT w.* FROM webhooks w
-       JOIN agencies a ON w.agency_id = a.id
-       WHERE LOWER(a.wallet_address) = LOWER($1)
-         AND w.active = TRUE
-         AND (w.events @> ARRAY['*'] OR w.events @> ARRAY[$2]::TEXT[])`,
+      `SELECT * FROM webhooks
+       WHERE LOWER(agency_address) = LOWER($1)
+         AND active = TRUE
+         AND (events @> ARRAY['*'] OR events @> ARRAY[$2]::TEXT[])`,
       [agencyWallet, event]
     );
     hooks = result.rows;
@@ -116,10 +115,10 @@ async function deliverOne(hook, body, deliveryId) {
   try {
     await db.query(
       `UPDATE webhooks
-       SET last_fired_at = NOW(),
-           last_status   = $1,
-           fail_count    = CASE WHEN $2 THEN 0 ELSE fail_count + 1 END,
-           active        = CASE WHEN fail_count >= 9 AND NOT $2 THEN FALSE ELSE active END
+       SET last_fired   = NOW(),
+           last_status  = $1,
+           failure_count = CASE WHEN $2 THEN 0 ELSE failure_count + 1 END,
+           active        = CASE WHEN failure_count >= 9 AND NOT $2 THEN FALSE ELSE active END
        WHERE id = $3`,
       [statusCode, succeeded, hook.id]
     );

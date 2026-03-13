@@ -39,11 +39,37 @@ const ADMIN_LINKS = [
 ];
 
 // ── Loading skeleton ──────────────────────────────────────────────────────────
-function LoadingView() {
+function LoadingView({ status }) {
+  const [timedOut, setTimedOut] = React.useState(false);
+  React.useEffect(() => {
+    // If still loading after 12s, show escape hatch — something went wrong
+    const t = setTimeout(() => setTimedOut(true), 12000);
+    return () => clearTimeout(t);
+  }, []);
+
+  const label = status === "signing" ? "Waiting for signature…" : "Verifying wallet…";
+
   return (
-    <div style={{ minHeight:"100vh",background:"#030a06",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:14 }}>
-      <div className="spinner" />
-      <div style={{ fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:15,color:"#64748b" }}>Verifying wallet…</div>
+    <div style={{ minHeight:"100vh",background:"#030a06",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:14,padding:"0 20px",textAlign:"center" }}>
+      {!timedOut ? (
+        <>
+          <div className="spinner" />
+          <div style={{ fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:15,color:"#64748b" }}>{label}</div>
+          <div style={{ fontSize:12,color:"#334155",marginTop:4 }}>Check your wallet for a signature request</div>
+        </>
+      ) : (
+        <>
+          <div style={{ fontSize:36,marginBottom:8 }}>⚠️</div>
+          <div style={{ fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:16,color:"#f0fdf4",marginBottom:8 }}>Taking longer than expected</div>
+          <div style={{ fontSize:13,color:"#64748b",marginBottom:24,maxWidth:360 }}>The verification timed out. Your wallet may be waiting for a signature, or the API may be unreachable.</div>
+          <button
+            onClick={() => window.location.reload()}
+            style={{ padding:"10px 24px",borderRadius:12,background:"linear-gradient(135deg,#34d399,#059669)",color:"#022c22",fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:14,border:"none",cursor:"pointer" }}
+          >
+            Reload Page
+          </button>
+        </>
+      )}
     </div>
   );
 }
@@ -65,6 +91,55 @@ function NotConnectedView() {
           <span>🟢 Admin</span><span>·</span>
           <span>🟦 Agency</span><span>·</span>
           <span>🟡 Unregistered</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+// ── Pending Approval view ──────────────────────────────────────────────────────
+function PendingView({ wallet }) {
+  const G = "#34d399";
+  return (
+    <div style={{ minHeight:"100vh",background:"#030a06",display:"flex",alignItems:"center",justifyContent:"center",padding:"0 5%",position:"relative",overflow:"hidden" }}>
+      <div style={{ position:"absolute",left:"60%",top:"20%",width:500,height:500,borderRadius:"50%",background:"#fbbf24",filter:"blur(110px)",opacity:.07,pointerEvents:"none" }} />
+      <div style={{ maxWidth:520,width:"100%",textAlign:"center",position:"relative",zIndex:2 }}>
+        <div style={{ width:72,height:72,borderRadius:20,background:"rgba(251,191,36,.1)",border:"1px solid rgba(251,191,36,.25)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:32,margin:"0 auto 24px" }}>⏳</div>
+        <div style={{ display:"inline-flex",alignItems:"center",gap:7,padding:"5px 14px",borderRadius:100,background:"rgba(251,191,36,.1)",border:"1px solid rgba(251,191,36,.2)",color:"#fbbf24",fontSize:11,fontWeight:600,letterSpacing:".08em",textTransform:"uppercase",marginBottom:16 }}>Pending Approval</div>
+        <h2 style={{ fontFamily:"'Syne',sans-serif",fontSize:28,fontWeight:800,color:"#f0fdf4",letterSpacing:"-.02em",marginBottom:12 }}>
+          Registration received
+        </h2>
+        <p style={{ color:"#64748b",fontSize:15,lineHeight:1.7,marginBottom:32 }}>
+          Your agency has been registered and your API key issued. An ImpactChain admin needs to approve your wallet on-chain before you can issue passports and disburse cUSD.
+        </p>
+
+        <div style={{ background:"rgba(255,255,255,.02)",border:"1px solid rgba(255,255,255,.07)",borderRadius:16,padding:24,marginBottom:28,textAlign:"left" }}>
+          <div style={{ fontSize:12,fontWeight:600,color:"#64748b",letterSpacing:".06em",textTransform:"uppercase",marginBottom:16 }}>What happens next</div>
+          {[
+            ["1", "Admin reviews your registration", "#fbbf24"],
+            ["2", "Your wallet is granted AGENCY_ROLE on-chain", "#fbbf24"],
+            ["3", "You can start issuing passports and disbursing cUSD", G],
+          ].map(([n, text, color]) => (
+            <div key={n} style={{ display:"flex",alignItems:"center",gap:14,marginBottom:12 }}>
+              <div style={{ width:26,height:26,borderRadius:8,background:`rgba(${color==="=G"?"52,211,153":"251,191,36"},.1)`,border:`1px solid rgba(${color===G?"52,211,153":"251,191,36"},.25)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color,flexShrink:0 }}>{n}</div>
+              <span style={{ color:"#94a3b8",fontSize:14 }}>{text}</span>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ background:"rgba(255,255,255,.02)",border:"1px solid rgba(255,255,255,.07)",borderRadius:12,padding:"14px 18px",marginBottom:28,textAlign:"left" }}>
+          <div style={{ fontSize:11,fontWeight:600,color:"#64748b",letterSpacing:".06em",textTransform:"uppercase",marginBottom:6 }}>Your wallet</div>
+          <div style={{ fontFamily:"monospace",fontSize:13,color:"#94a3b8",wordBreak:"break-all" }}>{wallet}</div>
+        </div>
+
+        <div style={{ display:"flex",gap:12,justifyContent:"center",flexWrap:"wrap" }}>
+          <button onClick={() => window.location.reload()} style={{ display:"inline-flex",alignItems:"center",gap:7,padding:"11px 22px",borderRadius:12,background:"transparent",color:"#94a3b8",fontFamily:"'Syne',sans-serif",fontWeight:600,fontSize:14,border:"1px solid rgba(255,255,255,.12)",cursor:"pointer" }}>
+            ↻ Check Status
+          </button>
+          <a href="/transparency" style={{ display:"inline-flex",alignItems:"center",gap:7,padding:"11px 22px",borderRadius:12,background:"transparent",color:"#94a3b8",fontFamily:"'Syne',sans-serif",fontWeight:600,fontSize:14,border:"1px solid rgba(255,255,255,.12)",textDecoration:"none" }}>
+            View Transparency Dashboard
+          </a>
         </div>
       </div>
     </div>
@@ -284,11 +359,13 @@ export default function DashboardPage() {
     {/* Show appropriate view based on status + role */}
     {!isConnected
       ? <NotConnectedView />
-      : status === "signing" || status === "verifying" || status === "refreshing" || status === "idle"
-        ? <LoadingView />
-        : role === "unregistered" || !role
-          ? <UnregisteredView wallet={wallet} />
-          : <DashboardView wallet={wallet} role={role} agency={agency} />
+      : status === "signing" || status === "verifying" || status === "idle"
+        ? <LoadingView status={status} />
+        : role === "pending"
+          ? <PendingView wallet={wallet} />
+          : role === "unregistered" || !role
+            ? <UnregisteredView wallet={wallet} />
+            : <DashboardView wallet={wallet} role={role} agency={agency} />
     }
   </>);
 }

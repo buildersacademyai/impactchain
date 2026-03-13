@@ -256,6 +256,9 @@ export default function PassportSearchPage() {
               <a href="/passport/register" className="btn-p" style={{ fontSize:12,padding:"8px 16px" }}>
                 + Register New
               </a>
+              <a href="/passport/by-phone" style={{ fontSize:12,padding:"8px 14px",borderRadius:9,background:"rgba(52,211,153,.08)",border:"1px solid rgba(52,211,153,.2)",color:"#34d399",textDecoration:"none",display:"inline-flex",alignItems:"center",gap:5 }}>
+                📞 Find by Phone
+              </a>
             </div>
 
             {/* Rows */}

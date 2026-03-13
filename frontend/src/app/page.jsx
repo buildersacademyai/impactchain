@@ -37,6 +37,7 @@ const ROUTES = [
   { href:"/admin",                icon:"🔐",  label:"Admin Panel",            desc:"Approve agencies, manage contracts (deployer only)", color:"#f87171" },
   { href:"/passport/register",    icon:"🪪",  label:"Register Beneficiary",   desc:"Create a new passport and pin data to IPFS",     color:"#60a5fa" },
   { href:"/passport/lookup",      icon:"🔍",  label:"Lookup Passport",        desc:"Find a passport by DID or phone number",         color:"#60a5fa" },
+  { href:"/passport/by-phone",    icon:"📞",  label:"Find by Phone",          desc:"Check if a beneficiary is already registered",  color:"#60a5fa" },
   { href:"/passport/search",      icon:"📋",  label:"Search Passports",       desc:"Browse & filter all beneficiaries your agency registered", color:"#60a5fa" },
   { href:"/passport/credentials", icon:"📜",  label:"Issue Credential",       desc:"Attach a Verifiable Credential to a passport",  color:"#60a5fa" },
   { href:"/passport/revoke",      icon:"🚫",  label:"Revoke Credential",      desc:"Permanently revoke a credential on-chain",       color:"#f87171" },
@@ -84,7 +85,7 @@ export default function HomePage() {
       <div style={{ maxWidth:860,margin:"0 auto",padding:"152px 5% 72px",textAlign:"center",position:"relative",zIndex:2 }}>
         <div className="tag fade-up" style={{ marginBottom:24 }}>
           <span className="dot" style={{ background:G }} />
-          Celo Alfajores Testnet
+          Celo Sepolia Testnet
         </div>
         <h1 className="fade-up" style={{ fontFamily:"'Syne',sans-serif",fontSize:"clamp(38px,6vw,72px)",fontWeight:800,color:"#f0fdf4",letterSpacing:"-.04em",lineHeight:1.05,marginBottom:22,animationDelay:".1s" }}>
           Humanitarian Aid<br /><span style={{ color:G }}>On-Chain</span>
@@ -150,7 +151,7 @@ export default function HomePage() {
                   <div style={{ fontSize:10,color:"#475569",textTransform:"uppercase",letterSpacing:".08em",marginBottom:4 }}>{name.replace(/_/g," ")}</div>
                   {addr === "not deployed"
                     ? <span style={{ color:"#fbbf24",fontSize:12 }}>not deployed</span>
-                    : <a href={`https://alfajores.celoscan.io/address/${addr}`} target="_blank" rel="noreferrer" style={{ fontFamily:"monospace",fontSize:12,color:G,wordBreak:"break-all" }}>{addr}</a>
+                    : <a href={`https://sepolia.celoscan.io/address/${addr}`} target="_blank" rel="noreferrer" style={{ fontFamily:"monospace",fontSize:12,color:G,wordBreak:"break-all" }}>{addr}</a>
                   }
                 </div>
               ))}

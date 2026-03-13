@@ -110,6 +110,55 @@ router.get("/:id", async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// GET /v1/oracle/:id/triggers
+router.get("/:id/triggers", async (req, res, next) => {
+  try {
+    const oracle = await db.query("SELECT * FROM oracles WHERE id=$1 LIMIT 1", [req.params.id]);
+    if (!oracle.rows.length) return res.status(404).json({ error: "Oracle not found" });
+
+    // Pull all disbursements for this oracle
+    const rows = await db.query(
+      `SELECT passport_did, recipient, amount_cusd, reason, tx_hash, disbursed_at
+       FROM disbursements
+       WHERE oracle_id = $1
+       ORDER BY disbursed_at DESC
+       LIMIT 200`,
+      [req.params.id]
+    );
+
+    // Group by minute to reconstruct trigger events
+    const grouped = new Map();
+    for (const r of rows.rows) {
+      const minute = new Date(r.disbursed_at).toISOString().slice(0, 16);
+      if (!grouped.has(minute)) {
+        grouped.set(minute, { triggered_at: r.disbursed_at, families_affected: 0, total_disbursed_cusd: 0, txs: [] });
+      }
+      const e = grouped.get(minute);
+      e.families_affected++;
+      e.total_disbursed_cusd += parseFloat(r.amount_cusd);
+      e.txs.push(r.tx_hash);
+    }
+
+    const triggers = Array.from(grouped.values()).map((t, i) => ({
+      index:                i,
+      triggered_at:         t.triggered_at,
+      families_affected:    t.families_affected,
+      total_disbursed_cusd: parseFloat(t.total_disbursed_cusd.toFixed(4)),
+      tx_hash:              t.txs[0] ?? null,
+      tx_count:             t.txs.length,
+      celo_scan:            t.txs[0] ? `${SCAN}/${t.txs[0]}` : null,
+    }));
+
+    return res.json({
+      oracle_id:      parseInt(req.params.id),
+      oracle_name:    oracle.rows[0].name,
+      trigger_count:  oracle.rows[0].trigger_count,
+      last_triggered: oracle.rows[0].last_triggered,
+      triggers,
+    });
+  } catch (err) { next(err); }
+});
+
 // POST /v1/oracle/:id/deactivate
 router.post("/:id/deactivate", async (req, res, next) => {
   try {
