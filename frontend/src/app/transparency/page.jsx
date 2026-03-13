@@ -1,5 +1,5 @@
 "use client";
-import { useDashboardLink } from "../../hooks/useDashboardLink";
+import Nav from "../../components/Nav";
 import React, { useState, useEffect } from "react";
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 const G = "#34d399";
@@ -12,24 +12,6 @@ const Blob = ({ x, y, color, size = 500 }) => (
   <div style={{ position:"absolute",left:x,top:y,width:size,height:size,borderRadius:"50%",background:color,filter:"blur(120px)",opacity:.1,pointerEvents:"none",transform:"translate(-50%,-50%)" }} />
 );
 
-function Nav() {
-  const [sc, setSc] = React.useState(false);
-  React.useEffect(() => { const h = () => setSc(window.scrollY > 20); window.addEventListener("scroll",h); return ()=>window.removeEventListener("scroll",h); },[]);
-    const { href: _dh, label: _dl, connected: _dc } = useDashboardLink();
-  const links = [["Passports","/passport/register"],["Disburse","/disburse"],["Oracle","/oracle"],["Transparency","/transparency"],...(_dc ? [[_dl,_dh]] : [])];
-  return (
-    <nav style={{ position:"fixed",top:0,left:0,right:0,zIndex:100,padding:"0 5%",height:62,display:"flex",alignItems:"center",justifyContent:"space-between",background:sc?"rgba(3,10,6,.95)":"rgba(3,10,6,.75)",backdropFilter:"blur(22px)",borderBottom:"1px solid rgba(255,255,255,.07)",transition:"background .4s" }}>
-      <a href="/" style={{ display:"flex",alignItems:"center",gap:9,textDecoration:"none" }}>
-        <div style={{ width:30,height:30,borderRadius:8,background:"linear-gradient(135deg,#34d399,#059669)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:800,color:"#022c22",fontFamily:"'Syne',sans-serif" }}>IC</div>
-        <span style={{ fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:16,color:"#f0fdf4",letterSpacing:"-.02em" }}>Impact<span style={{ color:G }}>Chain</span></span>
-      </a>
-      <div style={{ display:"flex",gap:24 }}>
-        {links.map(([l,h]) => <a key={l} href={h} style={{ color:l==="Transparency"?G:"#94a3b8",textDecoration:"none",fontSize:13,fontWeight:500,borderBottom:l==="Transparency"?"1px solid "+G:"none",paddingBottom:2 }}>{l}</a>)}
-      </div>
-      <a href="/agency/register" style={{ display:"inline-flex",padding:"7px 16px",borderRadius:10,background:"linear-gradient(135deg,#34d399,#059669)",color:"#022c22",fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:13,textDecoration:"none" }}>Register Agency</a>
-    </nav>
-  );
-}
 
 const CSS = `
   @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap');
